@@ -746,7 +746,7 @@ namespace SeekerDungeon.Solana
 
             if (state.CenterType == ChainDepthConfig.CENTER_CHEST)
             {
-                var lootedCount = state.LootedBy?.Count ?? 0;
+                var lootedCount = state.LootedBy?.Length ?? 0;
                 SetLabel(_chestLabel, $"Center: Chest ({lootedCount}/128 looted)");
                 _btnLootChest.text = "Loot Center";
                 SetButtonEnabled(_btnLootChest, true);
@@ -757,7 +757,7 @@ namespace SeekerDungeon.Solana
             {
                 if (state.BossDefeated)
                 {
-                    var lootedCount = state.LootedBy?.Count ?? 0;
+                    var lootedCount = state.LootedBy?.Length ?? 0;
                     SetLabel(_chestLabel, $"Center: Boss #{state.CenterId} defeated ({lootedCount}/128 looted)");
                     _btnLootChest.text = "Loot Boss";
                 }
