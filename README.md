@@ -64,7 +64,7 @@ The intent is utility, not passive token gating: SKR is used to coordinate coope
 ### Client (Game)
 | Layer | Choice |
 |---|---|
-| Engine | Unity `2022.3+` |
+| Engine | Unity `6000.3.6+` |
 | Language | C# |
 | UI | Unity UI Toolkit |
 | Solana integration | Solana Unity SDK |
