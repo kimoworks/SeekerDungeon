@@ -88,8 +88,8 @@ namespace SeekerDungeon.Solana
             _programId = new PublicKey(LGConfig.PROGRAM_ID);
             _globalPda = new PublicKey(LGConfig.GLOBAL_PDA);
 
-            rpcUrl = NormalizeRpcUrl(rpcUrl, LGConfig.RPC_URL);
-            fallbackRpcUrl = NormalizeRpcUrl(fallbackRpcUrl, LGConfig.RPC_FALLBACK_URL);
+            rpcUrl = LGConfig.GetRuntimeRpcUrl(rpcUrl);
+            fallbackRpcUrl = LGConfig.GetRuntimeFallbackRpcUrl(fallbackRpcUrl, rpcUrl);
 
             // Initialize RPC client
             _rpcClient = ClientFactory.GetClient(rpcUrl);
@@ -116,6 +116,13 @@ namespace SeekerDungeon.Solana
             
             Log($"LG Manager initialized. Program: {LGConfig.PROGRAM_ID}");
             Log($"RPC primary={rpcUrl} fallback={fallbackRpcUrl}");
+            Log($"Runtime network={LGConfig.ActiveRuntimeNetwork}");
+            Log($"SKR mint={LGConfig.ActiveSkrMint}");
+            if (LGConfig.IsUsingMainnetSkrMint &&
+                rpcUrl.IndexOf("devnet", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogError("Mainnet SKR mint selected while RPC is devnet. Switch RPC/program config before release.");
+            }
         }
 
         /// <summary>

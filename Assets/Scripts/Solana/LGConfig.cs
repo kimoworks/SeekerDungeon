@@ -7,15 +7,22 @@ namespace SeekerDungeon.Solana
     /// </summary>
     public static class LGConfig
     {
+        private const string DeploymentConfigResourcePath = "Solana/LGSolanaDeploymentConfig";
+
         // Program addresses (from devnet-config.json)
         public const string PROGRAM_ID = "3Ctc2FgnNHQtGAcZftMS4ykLhJYjLzBD3hELKy55DnKo";
+        // Devnet testing token mint used today.
         public const string SKR_MINT = "Dkpjmf6mUxxLyw9HmbdkBKhVf7zjGZZ6jNjruhjYpkiN";
+        // Real SKR mint on mainnet.
+        public const string MAINNET_SKR_MINT = "SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3";
         public const string GLOBAL_PDA = "9JudM6MujJyg5tBb7YaMw7DSQYVgCYNyzATzfyRSdy7G";
         public const string PRIZE_POOL_PDA = "5AuvdfSKKUsroC74RwVJ25jyhX5erMr8VCNLmj3EXQVg";
         
         // Network
         public const string RPC_URL = "https://api.devnet.solana.com";
         public const string RPC_FALLBACK_URL = "https://rpc.magicblock.app/devnet/";
+        public const string MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+        public const string MAINNET_RPC_FALLBACK_URL = "https://api.mainnet-beta.solana.com";
         
         // PDA seeds
         public const string GLOBAL_SEED = "global";
@@ -56,6 +63,106 @@ namespace SeekerDungeon.Solana
         public const ulong SKR_MULTIPLIER = 1_000_000_000;
         public const ulong STAKE_AMOUNT = 10_000_000; // 0.01 SKR
         public const ulong MIN_BOOST_TIP = 1_000_000; // 0.001 SKR
+
+        private static LGSolanaDeploymentConfig _cachedDeploymentConfig;
+        private static bool _deploymentConfigLoadAttempted;
+
+        /// <summary>
+        /// Runtime-selected SKR mint. Defaults to devnet mock mint when no deployment config asset is present.
+        /// </summary>
+        public static SolanaRuntimeNetwork ActiveRuntimeNetwork => GetActiveRuntimeNetwork();
+        public static bool IsMainnetRuntime => ActiveRuntimeNetwork == SolanaRuntimeNetwork.Mainnet;
+        public static string ActiveSkrMint => GetActiveSkrMint();
+        public static bool IsUsingMainnetSkrMint =>
+            string.Equals(ActiveSkrMint, MAINNET_SKR_MINT, System.StringComparison.Ordinal);
+
+        public static SolanaRuntimeNetwork GetActiveRuntimeNetwork()
+        {
+            var deploymentConfig = GetDeploymentConfig();
+            if (deploymentConfig == null)
+            {
+                return SolanaRuntimeNetwork.Devnet;
+            }
+
+            return deploymentConfig.SolanaNetwork;
+        }
+
+        public static string GetRuntimeRpcUrl(string inspectorValue)
+        {
+            var deploymentConfig = GetDeploymentConfig();
+            if (deploymentConfig == null)
+            {
+                return NormalizeUrl(inspectorValue, RPC_URL);
+            }
+
+            return deploymentConfig.SolanaNetwork == SolanaRuntimeNetwork.Mainnet
+                ? NormalizeUrl(deploymentConfig.MainnetRpcUrl, MAINNET_RPC_URL)
+                : NormalizeUrl(deploymentConfig.DevnetRpcUrl, RPC_URL);
+        }
+
+        public static string GetRuntimeFallbackRpcUrl(string inspectorValue, string resolvedPrimary)
+        {
+            var deploymentConfig = GetDeploymentConfig();
+            var fallback = deploymentConfig == null
+                ? NormalizeUrl(inspectorValue, RPC_FALLBACK_URL)
+                : deploymentConfig.SolanaNetwork == SolanaRuntimeNetwork.Mainnet
+                    ? NormalizeUrl(deploymentConfig.MainnetFallbackRpcUrl, MAINNET_RPC_FALLBACK_URL)
+                    : NormalizeUrl(deploymentConfig.DevnetFallbackRpcUrl, RPC_FALLBACK_URL);
+
+            if (!string.IsNullOrWhiteSpace(fallback))
+            {
+                return fallback;
+            }
+
+            return NormalizeUrl(resolvedPrimary, RPC_URL);
+        }
+
+        public static string GetActiveSkrMint()
+        {
+            var deploymentConfig = GetDeploymentConfig();
+            if (deploymentConfig == null)
+            {
+                return SKR_MINT;
+            }
+
+            if (deploymentConfig.SkrMintMode == SkrMintMode.MainnetReal)
+            {
+                return MAINNET_SKR_MINT;
+            }
+
+            if (deploymentConfig.SkrMintMode == SkrMintMode.Custom)
+            {
+                var customMint = deploymentConfig.CustomSkrMint?.Trim();
+                if (!string.IsNullOrWhiteSpace(customMint))
+                {
+                    return customMint;
+                }
+            }
+
+            return SKR_MINT;
+        }
+
+        private static LGSolanaDeploymentConfig GetDeploymentConfig()
+        {
+            if (_deploymentConfigLoadAttempted)
+            {
+                return _cachedDeploymentConfig;
+            }
+
+            _deploymentConfigLoadAttempted = true;
+            _cachedDeploymentConfig = Resources.Load<LGSolanaDeploymentConfig>(DeploymentConfigResourcePath);
+            return _cachedDeploymentConfig;
+        }
+
+        private static string NormalizeUrl(string value, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return fallback;
+            }
+
+            return value.Trim();
+        }
         
         /// <summary>
         /// Get direction name for debugging

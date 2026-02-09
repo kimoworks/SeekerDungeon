@@ -378,7 +378,11 @@ namespace SeekerDungeon.Solana
 
             if (_walletSessionActionLabel != null)
             {
-                _walletSessionActionLabel.text = state.IsSessionReady ? "ACTIVE" : "ACTIVATE";
+                _walletSessionActionLabel.text = state.IsSessionReady
+                    ? "ACTIVE"
+                    : state.HasProfile
+                        ? "ACTIVATE"
+                        : "LOCKED";
             }
 
             if (_walletSessionIconInactive != null)
@@ -477,7 +481,11 @@ namespace SeekerDungeon.Solana
             _disconnectButton?.SetEnabled(!state.IsBusy);
             if (_sessionPillButton != null)
             {
-                var canActivateSession = !state.IsSessionReady && state.IsReady && !state.IsBusy;
+                var canActivateSession =
+                    !state.IsSessionReady &&
+                    state.IsReady &&
+                    !state.IsBusy &&
+                    state.HasProfile;
                 _sessionPillButton.SetEnabled(canActivateSession);
             }
 

@@ -225,7 +225,7 @@ namespace SeekerDungeon.Solana
                 SetLabel(_solBalanceLabel, "SOL: --");
             }
 
-            var skrMint = new PublicKey(LGConfig.SKR_MINT);
+            var skrMint = new PublicKey(LGConfig.ActiveSkrMint);
             var tokenAccounts = await wallet.GetTokenAccounts(skrMint, TokenProgram.ProgramIdKey);
             if (tokenAccounts != null && tokenAccounts.Length > 0)
             {

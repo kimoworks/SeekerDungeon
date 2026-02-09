@@ -354,6 +354,12 @@ namespace SeekerDungeon.Solana
 
         public void EnsureSessionReadyFromMenu()
         {
+            if (!HasExistingProfile)
+            {
+                EmitState("Create your character before activating session.");
+                return;
+            }
+
             EnsureSessionReadyFromMenuAsync().Forget();
         }
 
@@ -508,6 +514,12 @@ namespace SeekerDungeon.Solana
                 return;
             }
 
+            if (!HasExistingProfile)
+            {
+                EmitState("Create your character before activating session.");
+                return;
+            }
+
             if (walletSessionManager.CanUseLocalSessionSigning)
             {
                 EmitState("Session ready");
@@ -529,6 +541,12 @@ namespace SeekerDungeon.Solana
         {
             if (_isEnsuringSessionFromMenu || walletSessionManager == null)
             {
+                return;
+            }
+
+            if (!HasExistingProfile)
+            {
+                EmitState("Create your character before activating session.");
                 return;
             }
 
@@ -595,7 +613,7 @@ namespace SeekerDungeon.Solana
                         _solBalanceValue = 0d;
                     }
 
-                    var skrMint = new PublicKey(LGConfig.SKR_MINT);
+                    var skrMint = new PublicKey(LGConfig.ActiveSkrMint);
                     var playerAta = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(account.PublicKey, skrMint);
                     var tokenResult = await wallet.ActiveRpcClient.GetTokenAccountBalanceAsync(playerAta, Commitment.Confirmed);
                     if (tokenResult.WasSuccessful && tokenResult.Result?.Value != null)

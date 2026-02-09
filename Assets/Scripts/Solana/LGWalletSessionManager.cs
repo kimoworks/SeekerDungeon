@@ -154,8 +154,8 @@ namespace SeekerDungeon.Solana
             _programId = new PublicKey(LGConfig.PROGRAM_ID);
             _globalPda = new PublicKey(LGConfig.GLOBAL_PDA);
             InitializeEditorWalletSlot();
-            rpcUrl = NormalizeRpcUrl(rpcUrl, LGConfig.RPC_URL);
-            fallbackRpcUrl = NormalizeRpcUrl(fallbackRpcUrl, LGConfig.RPC_FALLBACK_URL);
+            rpcUrl = LGConfig.GetRuntimeRpcUrl(rpcUrl);
+            fallbackRpcUrl = LGConfig.GetRuntimeFallbackRpcUrl(fallbackRpcUrl, rpcUrl);
             _fallbackRpcClient = ClientFactory.GetClient(rpcUrl);
             _secondaryRpcClient = string.Equals(rpcUrl, fallbackRpcUrl, StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -163,6 +163,7 @@ namespace SeekerDungeon.Solana
 
             EnsureWeb3ExistsAndConfigured();
             EmitStatus($"RPC primary={rpcUrl} fallback={fallbackRpcUrl}");
+            EmitStatus($"Runtime network={LGConfig.ActiveRuntimeNetwork}");
         }
 
         private void OnEnable()
@@ -330,7 +331,7 @@ namespace SeekerDungeon.Solana
             var playerPda = DerivePlayerPda(player);
             var playerTokenAccount = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(
                 player,
-                new PublicKey(LGConfig.SKR_MINT)
+                new PublicKey(LGConfig.ActiveSkrMint)
             );
 
             var playerTokenAccountReady = await EnsurePlayerTokenAccountExistsAsync(player, playerTokenAccount);
@@ -436,7 +437,7 @@ namespace SeekerDungeon.Solana
             var createAtaInstruction = AssociatedTokenAccountProgram.CreateAssociatedTokenAccount(
                 player,
                 player,
-                new PublicKey(LGConfig.SKR_MINT));
+                new PublicKey(LGConfig.ActiveSkrMint));
             var createAtaSignature = await SendInstructionSignedByLocalAccounts(
                 createAtaInstruction,
                 new List<Account> { Web3.Wallet.Account });
@@ -545,7 +546,7 @@ namespace SeekerDungeon.Solana
             var player = ConnectedWalletPublicKey;
             var playerTokenAccount = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(
                 player,
-                new PublicKey(LGConfig.SKR_MINT)
+                new PublicKey(LGConfig.ActiveSkrMint)
             );
 
             var instruction = ChaindepthProgram.EndSession(
@@ -1030,7 +1031,14 @@ namespace SeekerDungeon.Solana
 
         private void ApplyWeb3RpcOverrides(Web3 web3)
         {
-            web3.rpcCluster = RpcCluster.DevNet;
+            var cluster = RpcCluster.DevNet;
+            if (LGConfig.IsMainnetRuntime &&
+                Enum.TryParse<RpcCluster>("MainNet", true, out var mainnetCluster))
+            {
+                cluster = mainnetCluster;
+            }
+
+            web3.rpcCluster = cluster;
             web3.customRpc = rpcUrl;
             web3.webSocketsRpc = ToWebSocketUrl(rpcUrl);
             web3.autoConnectOnStartup = false;

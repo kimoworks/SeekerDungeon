@@ -32,6 +32,7 @@ Project defaults for this repo.
   2. Regenerate Unity client from IDL (`Assets/Scripts/Solana/Generated/LGClient.cs`).
   3. Update domain wrappers/mappers in `Assets/Scripts/Solana/LGDomainModels.cs` when needed.
 - Keep game-facing code using DomainModels/wrappers instead of raw generated account structs where practical.
+- For Android debugging on this machine, use `adb` from `E:\platform-tools` when PATH/env vars are constrained.
 
 ## Unity Naming
 - Do not add `LG` prefix to every new script by default.
