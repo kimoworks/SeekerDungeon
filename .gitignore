@@ -190,3 +190,7 @@ TestResults/
 test-results/
 
 solana-program/devnet-wallet.json
+
+# Local Unity secrets/config overrides (keep API keys out of scenes/prefabs)
+Assets/Resources/LocalSecrets/*
+!Assets/Resources/LocalSecrets/.gitkeep

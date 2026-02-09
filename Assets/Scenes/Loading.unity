@@ -489,7 +489,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 39, y: -536.49}
+  m_AnchoredPosition: {x: 39, y: -607}
   m_SizeDelta: {x: 1928.0825, y: 1092.5253}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &539368776
@@ -692,7 +692,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Solana.LGManager
   logDebugMessages: 1
   rpcUrl: https://api.devnet.solana.com
-  fallbackRpcUrl: https://rpc.magicblock.app/devnet/
+  fallbackRpcUrl: https://rpc.magicblock.app/mainnet-beta/
 --- !u!114 &674770250
 MonoBehaviour:
   m_ObjectHideFlags: 0

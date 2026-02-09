@@ -562,6 +562,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Solana.LGMainMenuCharacterUI
   characterManager: {fileID: 1459274709}
+  worldToUiCamera: {fileID: 0}
+  worldNameScreenOffsetY: 24
+  worldNameLabelWidth: 420
 --- !u!1 &1156078724
 GameObject:
   m_ObjectHideFlags: 0
@@ -689,6 +692,21 @@ MonoBehaviour:
   loadingSceneName: Loading
   maxDisplayNameLength: 24
   prepareGameplaySessionInMenu: 1
+  autoResolveSeekerIdAsDefaultName: 1
+  preferEnhancedSeekerIdentityLookup: 1
+  seekerIdentityEnhancedHistoryUrlTemplate: 
+  seekerIdentityEnhancedFallbackUrlTemplates: []
+  seekerIdentityRpcUrl: https://api.mainnet-beta.solana.com
+  seekerIdentityFallbackRpcUrls: []
+  seekerIdentitySignatureScanLimit: 20
+  animateInitialCharacterPop: 1
+  initialCharacterPopStartScale: 0.82
+  initialCharacterPopOvershootScale: 1.08
+  initialCharacterPopGrowDuration: 0.14
+  initialCharacterPopSettleDuration: 0.12
+  showLowBalanceModalOnMenuLoad: 1
+  minimumSolForCharacterCreate: 0.001
+  minimumSkrForCharacterCreate: 0.001
   logDebugMessages: 1
 --- !u!4 &1459274710
 Transform:

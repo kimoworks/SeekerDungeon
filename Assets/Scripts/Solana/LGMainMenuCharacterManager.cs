@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using DG.Tweening;
 using SeekerDungeon;
 using Solana.Unity.Programs;
 using Solana.Unity.Rpc.Types;
@@ -27,6 +28,8 @@ namespace SeekerDungeon.Solana
         public bool IsSessionReady { get; init; }
         public string SessionStatusText { get; init; }
         public string StatusMessage { get; init; }
+        public bool IsLowBalanceModalVisible { get; init; }
+        public string LowBalanceModalMessage { get; init; }
     }
 
     /// <summary>
@@ -37,6 +40,7 @@ namespace SeekerDungeon.Solana
         private const int DefaultMaxDisplayNameLength = 24;
         private const int PlayerInitFetchMaxAttempts = 12;
         private const int PlayerInitFetchDelayMs = 500;
+        private const string LocalSeekerIdentityConfigResourcePath = "LocalSecrets/LocalSeekerIdentityConfig";
 
         [Header("References")]
         [SerializeField] private LGManager lgManager;
@@ -53,6 +57,27 @@ namespace SeekerDungeon.Solana
         [Header("Session UX")]
         [SerializeField] private bool prepareGameplaySessionInMenu = true;
 
+        [Header("Seeker ID")]
+        [SerializeField] private bool autoResolveSeekerIdAsDefaultName = true;
+        [SerializeField] private bool preferEnhancedSeekerIdentityLookup = true;
+        [SerializeField] private string seekerIdentityEnhancedHistoryUrlTemplate = string.Empty;
+        [SerializeField] private List<string> seekerIdentityEnhancedFallbackUrlTemplates = new();
+        [SerializeField] private string seekerIdentityRpcUrl = "https://api.mainnet-beta.solana.com";
+        [SerializeField] private List<string> seekerIdentityFallbackRpcUrls = new();
+        [SerializeField] private int seekerIdentitySignatureScanLimit = 20;
+
+        [Header("Character Pop In")]
+        [SerializeField] private bool animateInitialCharacterPop = true;
+        [SerializeField] private float initialCharacterPopStartScale = 0.82f;
+        [SerializeField] private float initialCharacterPopOvershootScale = 1.08f;
+        [SerializeField] private float initialCharacterPopGrowDuration = 0.14f;
+        [SerializeField] private float initialCharacterPopSettleDuration = 0.12f;
+
+        [Header("Low Balance UX")]
+        [SerializeField] private bool showLowBalanceModalOnMenuLoad = true;
+        [SerializeField] private double minimumSolForCharacterCreate = 0.001d;
+        [SerializeField] private double minimumSkrForCharacterCreate = 0.001d;
+
         [Header("Debug")]
         [SerializeField] private bool logDebugMessages = true;
 
@@ -62,6 +87,8 @@ namespace SeekerDungeon.Solana
         public bool IsReady { get; private set; }
         public bool HasExistingProfile { get; private set; }
         public bool IsBusy { get; private set; }
+        public Transform CharacterNameAnchorTransform =>
+            playerController != null ? playerController.CharacterNameAnchorTransform : null;
         public PlayerSkinId SelectedSkin { get; private set; } = PlayerSkinId.Goblin;
         public string PendingDisplayName { get; private set; } = string.Empty;
         public bool HasUnsavedProfileChanges { get; private set; }
@@ -73,6 +100,17 @@ namespace SeekerDungeon.Solana
         private bool _isSessionReady;
         private bool _isRefreshingWalletPanel;
         private bool _isEnsuringSessionFromMenu;
+        private bool _hasUserEditedDisplayName;
+        private bool _isResolvingSeekerId;
+        private bool _hasPlayedInitialCharacterPop;
+        private Vector3 _playerBaseScale = Vector3.one;
+        private Tween _playerPopTween;
+        private double _solBalanceValue;
+        private double _skrBalanceValue;
+        private bool _hasWalletBalanceSnapshot;
+        private bool _showLowBalanceModal;
+        private string _lowBalanceModalMessage = string.Empty;
+        private LocalSeekerIdentityConfig _localSeekerIdentityConfig;
 
         private void Awake()
         {
@@ -101,6 +139,14 @@ namespace SeekerDungeon.Solana
                 walletSessionManager = FindObjectOfType<LGWalletSessionManager>();
             }
 
+            _localSeekerIdentityConfig =
+                Resources.Load<LocalSeekerIdentityConfig>(LocalSeekerIdentityConfigResourcePath);
+            if (_localSeekerIdentityConfig != null && logDebugMessages)
+            {
+                Debug.Log(
+                    $"[MainMenuCharacter] Loaded local Seeker identity config from Resources/{LocalSeekerIdentityConfigResourcePath}");
+            }
+
             RebuildSelectableSkins();
 
             if (_selectableSkins.Count > 0)
@@ -108,12 +154,19 @@ namespace SeekerDungeon.Solana
                 SelectedSkin = _selectableSkins[0];
             }
 
+            CapturePlayerBaseScale();
             SetPlayerVisible(false);
         }
 
         private void Start()
         {
             InitializeAsync().Forget();
+        }
+
+        private void OnDestroy()
+        {
+            _playerPopTween?.Kill();
+            _playerPopTween = null;
         }
 
         public MainMenuCharacterState GetCurrentState()
@@ -168,6 +221,7 @@ namespace SeekerDungeon.Solana
                 return;
             }
 
+            _hasUserEditedDisplayName = true;
             PendingDisplayName = SanitizeDisplayName(nameInput);
             RefreshUnsavedProfileChanges();
             EmitState("Choose your character");
@@ -189,6 +243,13 @@ namespace SeekerDungeon.Solana
             if (Web3.Wallet?.Account == null)
             {
                 EmitError("Wallet is not connected.");
+                return;
+            }
+
+            if (IsLowBalanceForCharacterCreate())
+            {
+                ShowLowBalanceModal();
+                EmitState("Wallet balance is too low.");
                 return;
             }
 
@@ -296,6 +357,17 @@ namespace SeekerDungeon.Solana
             EnsureSessionReadyFromMenuAsync().Forget();
         }
 
+        public void DismissLowBalanceModal()
+        {
+            if (!_showLowBalanceModal)
+            {
+                return;
+            }
+
+            _showLowBalanceModal = false;
+            EmitState(string.Empty);
+        }
+
         private async UniTaskVoid InitializeAsync()
         {
             if (lgManager == null)
@@ -313,16 +385,13 @@ namespace SeekerDungeon.Solana
             IsBusy = true;
             SetPlayerVisible(false);
             EmitState("Loading profile...");
+            var startupStatusMessage = string.Empty;
 
             try
             {
-                await EnsurePlayerInitializedAsync();
+                await lgManager.FetchGlobalState();
+                await lgManager.FetchPlayerState();
                 await lgManager.FetchPlayerProfile();
-
-                if (prepareGameplaySessionInMenu)
-                {
-                    await PrepareGameplaySessionAsync();
-                }
 
                 var profile = lgManager.CurrentProfileState;
                 HasExistingProfile = profile != null;
@@ -333,6 +402,7 @@ namespace SeekerDungeon.Solana
                     PendingDisplayName = string.IsNullOrWhiteSpace(profile.DisplayName)
                         ? GetShortWalletAddress()
                         : profile.DisplayName;
+                    _hasUserEditedDisplayName = false;
                     SetSavedProfileSnapshot(SelectedSkin, PendingDisplayName);
                     ApplySelectedSkinVisual();
                 }
@@ -344,32 +414,65 @@ namespace SeekerDungeon.Solana
                     }
 
                     PendingDisplayName = GetShortWalletAddress();
+                    _hasUserEditedDisplayName = false;
                     HasUnsavedProfileChanges = false;
                     ApplySelectedSkinVisual();
                 }
 
+                if (prepareGameplaySessionInMenu && HasExistingProfile)
+                {
+                    await PrepareGameplaySessionAsync();
+                }
+
                 IsReady = true;
                 await RefreshWalletPanelAsync();
+                if (showLowBalanceModalOnMenuLoad && IsLowBalanceForCharacterCreate())
+                {
+                    ShowLowBalanceModal();
+                }
                 if (prepareGameplaySessionInMenu &&
                     walletSessionManager != null &&
+                    HasExistingProfile &&
                     !walletSessionManager.CanUseLocalSessionSigning)
                 {
-                    EmitState("Session unavailable. Gameplay will require wallet approval.");
+                    startupStatusMessage = "Session unavailable. Gameplay will require wallet approval.";
                 }
-                else
+
+                if (!HasExistingProfile && autoResolveSeekerIdAsDefaultName)
                 {
-                    EmitState(string.Empty);
+                    ResolveSeekerIdDefaultNameAsync().Forget();
                 }
             }
             catch (Exception exception)
             {
-                EmitError($"Failed to load menu profile: {exception.Message}");
+                Debug.LogError($"[MainMenuCharacter] Failed to load menu profile: {exception.Message}");
+                HasExistingProfile = false;
+                if (_selectableSkins.Count > 0)
+                {
+                    SelectedSkin = _selectableSkins[0];
+                }
+
+                PendingDisplayName = GetShortWalletAddress();
+                _hasUserEditedDisplayName = false;
+                HasUnsavedProfileChanges = false;
+                ApplySelectedSkinVisual();
+                IsReady = true;
+                await RefreshWalletPanelAsync();
+                if (showLowBalanceModalOnMenuLoad && IsLowBalanceForCharacterCreate())
+                {
+                    ShowLowBalanceModal();
+                }
+                if (autoResolveSeekerIdAsDefaultName)
+                {
+                    ResolveSeekerIdDefaultNameAsync().Forget();
+                }
+                startupStatusMessage = "Wallet connected. Character sync unavailable.";
             }
             finally
             {
                 IsBusy = false;
-                SetPlayerVisible(true);
-                EmitState(string.Empty);
+                ShowPlayerAfterInitialize();
+                EmitState(startupStatusMessage);
             }
         }
 
@@ -466,35 +569,72 @@ namespace SeekerDungeon.Solana
                 {
                     _solBalanceText = "--";
                     _skrBalanceText = "--";
+                    _solBalanceValue = 0d;
+                    _skrBalanceValue = 0d;
+                    _hasWalletBalanceSnapshot = false;
                     _isSessionReady = false;
                     return;
                 }
 
                 _isSessionReady = walletSessionManager != null && walletSessionManager.CanUseLocalSessionSigning;
+                var hasSolSnapshot = false;
+                var hasSkrSnapshot = false;
 
-                var solResult = await wallet.ActiveRpcClient.GetBalanceAsync(account.PublicKey, Commitment.Confirmed);
-                if (solResult.WasSuccessful && solResult.Result != null)
+                try
                 {
-                    _solBalanceText = $"{(solResult.Result.Value / 1_000_000_000d):F3}";
+                    var solResult = await wallet.ActiveRpcClient.GetBalanceAsync(account.PublicKey, Commitment.Confirmed);
+                    if (solResult.WasSuccessful && solResult.Result != null)
+                    {
+                        _solBalanceValue = solResult.Result.Value / 1_000_000_000d;
+                        _solBalanceText = $"{_solBalanceValue:F3}";
+                        hasSolSnapshot = true;
+                    }
+                    else
+                    {
+                        _solBalanceText = "--";
+                        _solBalanceValue = 0d;
+                    }
+
+                    var skrMint = new PublicKey(LGConfig.SKR_MINT);
+                    var playerAta = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(account.PublicKey, skrMint);
+                    var tokenResult = await wallet.ActiveRpcClient.GetTokenAccountBalanceAsync(playerAta, Commitment.Confirmed);
+                    if (tokenResult.WasSuccessful && tokenResult.Result?.Value != null)
+                    {
+                        var rawAmount = tokenResult.Result.Value.Amount ?? "0";
+                        var amountLamports = ulong.TryParse(rawAmount, out var parsedAmount) ? parsedAmount : 0UL;
+                        _skrBalanceValue = amountLamports / (double)LGConfig.SKR_MULTIPLIER;
+                        _skrBalanceText = $"{_skrBalanceValue:F3}";
+                        hasSkrSnapshot = true;
+                    }
+                    else
+                    {
+                        _skrBalanceValue = 0d;
+                        if (IsMissingTokenAccountReason(tokenResult?.Reason))
+                        {
+                            _skrBalanceText = "0";
+                            hasSkrSnapshot = true;
+                        }
+                        else
+                        {
+                            _skrBalanceText = "--";
+                        }
+                    }
                 }
-                else
+                catch (Exception exception)
                 {
                     _solBalanceText = "--";
+                    _skrBalanceText = "--";
+                    _solBalanceValue = 0d;
+                    _skrBalanceValue = 0d;
+                    hasSolSnapshot = false;
+                    hasSkrSnapshot = false;
+                    if (logDebugMessages)
+                    {
+                        Debug.Log($"[MainMenuCharacter] Balance refresh skipped: {exception.Message}");
+                    }
                 }
 
-                var skrMint = new PublicKey(LGConfig.SKR_MINT);
-                var playerAta = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(account.PublicKey, skrMint);
-                var tokenResult = await wallet.ActiveRpcClient.GetTokenAccountBalanceAsync(playerAta, Commitment.Confirmed);
-                if (tokenResult.WasSuccessful && tokenResult.Result?.Value != null)
-                {
-                    var rawAmount = tokenResult.Result.Value.Amount ?? "0";
-                    var amountLamports = ulong.TryParse(rawAmount, out var parsedAmount) ? parsedAmount : 0UL;
-                    _skrBalanceText = $"{(amountLamports / (double)LGConfig.SKR_MULTIPLIER):F3}";
-                }
-                else
-                {
-                    _skrBalanceText = "0";
-                }
+                _hasWalletBalanceSnapshot = hasSolSnapshot && hasSkrSnapshot;
             }
             finally
             {
@@ -620,6 +760,138 @@ namespace SeekerDungeon.Solana
             return trimmedValue.Substring(0, maxDisplayNameLength);
         }
 
+        private bool GetPreferEnhancedSeekerLookup()
+        {
+            if (_localSeekerIdentityConfig != null)
+            {
+                return _localSeekerIdentityConfig.PreferEnhancedLookup;
+            }
+
+            return preferEnhancedSeekerIdentityLookup;
+        }
+
+        private string GetSeekerIdentityRpcUrl()
+        {
+            var localValue = _localSeekerIdentityConfig != null
+                ? _localSeekerIdentityConfig.MainnetRpcUrl
+                : null;
+            if (!string.IsNullOrWhiteSpace(localValue))
+            {
+                return localValue.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(seekerIdentityRpcUrl))
+            {
+                return seekerIdentityRpcUrl.Trim();
+            }
+
+            return "https://api.mainnet-beta.solana.com";
+        }
+
+        private IReadOnlyList<string> GetSeekerIdentityFallbackRpcUrls()
+        {
+            if (_localSeekerIdentityConfig != null &&
+                _localSeekerIdentityConfig.FallbackMainnetRpcUrls != null &&
+                _localSeekerIdentityConfig.FallbackMainnetRpcUrls.Count > 0)
+            {
+                return _localSeekerIdentityConfig.FallbackMainnetRpcUrls;
+            }
+
+            return seekerIdentityFallbackRpcUrls;
+        }
+
+        private string GetSeekerIdentityEnhancedUrlTemplate()
+        {
+            var localValue = _localSeekerIdentityConfig != null
+                ? _localSeekerIdentityConfig.EnhancedHistoryUrlTemplate
+                : null;
+            if (!string.IsNullOrWhiteSpace(localValue))
+            {
+                return localValue.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(seekerIdentityEnhancedHistoryUrlTemplate))
+            {
+                return seekerIdentityEnhancedHistoryUrlTemplate.Trim();
+            }
+
+            return string.Empty;
+        }
+
+        private IReadOnlyList<string> GetSeekerIdentityEnhancedFallbackTemplates()
+        {
+            if (_localSeekerIdentityConfig != null &&
+                _localSeekerIdentityConfig.FallbackEnhancedHistoryUrlTemplates != null &&
+                _localSeekerIdentityConfig.FallbackEnhancedHistoryUrlTemplates.Count > 0)
+            {
+                return _localSeekerIdentityConfig.FallbackEnhancedHistoryUrlTemplates;
+            }
+
+            return seekerIdentityEnhancedFallbackUrlTemplates;
+        }
+
+        private async UniTaskVoid ResolveSeekerIdDefaultNameAsync()
+        {
+            if (_isResolvingSeekerId || HasExistingProfile || _hasUserEditedDisplayName)
+            {
+                return;
+            }
+
+            var walletPublicKey = Web3.Wallet?.Account?.PublicKey;
+            if (walletPublicKey == null)
+            {
+                return;
+            }
+
+            _isResolvingSeekerId = true;
+            try
+            {
+                var seekerId = await SeekerIdentityResolver.TryResolveSkrForWalletAsync(
+                    walletPublicKey,
+                    GetSeekerIdentityRpcUrl(),
+                    seekerIdentitySignatureScanLimit,
+                    GetSeekerIdentityFallbackRpcUrls(),
+                    GetPreferEnhancedSeekerLookup(),
+                    GetSeekerIdentityEnhancedUrlTemplate(),
+                    GetSeekerIdentityEnhancedFallbackTemplates());
+                if (string.IsNullOrWhiteSpace(seekerId))
+                {
+                    return;
+                }
+
+                if (HasExistingProfile || _hasUserEditedDisplayName)
+                {
+                    return;
+                }
+
+                var currentDefault = GetShortWalletAddress();
+                if (!string.Equals(PendingDisplayName, currentDefault, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                PendingDisplayName = SanitizeDisplayName(seekerId);
+                RefreshUnsavedProfileChanges();
+                EmitState(string.Empty);
+
+                if (logDebugMessages)
+                {
+                    Debug.Log($"[MainMenuCharacter] Resolved Seeker ID default name: {PendingDisplayName}");
+                }
+            }
+            catch (Exception exception)
+            {
+                if (logDebugMessages)
+                {
+                    Debug.Log($"[MainMenuCharacter] Seeker ID resolution skipped: {exception.Message}");
+                }
+            }
+            finally
+            {
+                _isResolvingSeekerId = false;
+            }
+        }
+
         private void SetSavedProfileSnapshot(PlayerSkinId skin, string displayName)
         {
             _savedProfileSkin = skin;
@@ -673,7 +945,9 @@ namespace SeekerDungeon.Solana
                 SkrBalanceText = _skrBalanceText,
                 IsSessionReady = _isSessionReady,
                 SessionStatusText = _isSessionReady ? "Ready" : "Not Ready",
-                StatusMessage = statusMessage
+                StatusMessage = statusMessage,
+                IsLowBalanceModalVisible = _showLowBalanceModal,
+                LowBalanceModalMessage = _lowBalanceModalMessage
             };
         }
 
@@ -682,6 +956,40 @@ namespace SeekerDungeon.Solana
             Debug.LogError($"[MainMenuCharacter] {message}");
             OnError?.Invoke(message);
             EmitState(message);
+        }
+
+        private bool IsLowBalanceForCharacterCreate()
+        {
+            if (!_hasWalletBalanceSnapshot)
+            {
+                return false;
+            }
+
+            return
+                _solBalanceValue < minimumSolForCharacterCreate ||
+                _skrBalanceValue < minimumSkrForCharacterCreate;
+        }
+
+        private void ShowLowBalanceModal()
+        {
+            _showLowBalanceModal = true;
+            _lowBalanceModalMessage =
+                $"Your SOL and SKR balances are too low for character setup.\n\n" +
+                $"SOL: {_solBalanceText} / min {minimumSolForCharacterCreate:F3}\n" +
+                $"SKR: {_skrBalanceText} / min {minimumSkrForCharacterCreate:F3}\n\n" +
+                "Please send more SOL and SKR to your connected wallet, then try again.";
+        }
+
+        private static bool IsMissingTokenAccountReason(string reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return false;
+            }
+
+            return
+                reason.IndexOf("could not find account", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                reason.IndexOf("account not found", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private async UniTaskVoid LoadSceneWithFadeAsync(string sceneName)
@@ -703,7 +1011,74 @@ namespace SeekerDungeon.Solana
                 return;
             }
 
+            if (!isVisible)
+            {
+                _playerPopTween?.Kill();
+                _playerPopTween = null;
+            }
+
             playerController.gameObject.SetActive(isVisible);
+        }
+
+        private void ShowPlayerAfterInitialize()
+        {
+            if (playerController == null)
+            {
+                return;
+            }
+
+            if (_hasPlayedInitialCharacterPop || !animateInitialCharacterPop)
+            {
+                SetPlayerVisible(true);
+                ResetPlayerScaleImmediate();
+                return;
+            }
+
+            SetPlayerVisible(true);
+            var playerTransform = playerController.transform;
+            if (playerTransform == null)
+            {
+                return;
+            }
+
+            _hasPlayedInitialCharacterPop = true;
+            _playerPopTween?.Kill();
+            playerTransform.localScale = _playerBaseScale * Mathf.Max(0.01f, initialCharacterPopStartScale);
+            _playerPopTween = DOTween.Sequence()
+                .Append(playerTransform
+                    .DOScale(_playerBaseScale * Mathf.Max(0.01f, initialCharacterPopOvershootScale), initialCharacterPopGrowDuration)
+                    .SetEase(Ease.OutQuad))
+                .Append(playerTransform
+                    .DOScale(_playerBaseScale, initialCharacterPopSettleDuration)
+                    .SetEase(Ease.OutBack))
+                .SetUpdate(true)
+                .OnKill(() =>
+                {
+                    if (playerTransform != null)
+                    {
+                        playerTransform.localScale = _playerBaseScale;
+                    }
+                });
+        }
+
+        private void CapturePlayerBaseScale()
+        {
+            if (playerController == null || playerController.transform == null)
+            {
+                return;
+            }
+
+            _playerBaseScale = playerController.transform.localScale;
+        }
+
+        private void ResetPlayerScaleImmediate()
+        {
+            if (playerController == null || playerController.transform == null)
+            {
+                return;
+            }
+
+            playerController.transform.localScale = _playerBaseScale;
         }
     }
 }

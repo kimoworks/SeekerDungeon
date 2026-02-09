@@ -19,6 +19,8 @@ namespace SeekerDungeon.Solana
     {
         [SerializeField] private SpriteRenderer skinSpriteRenderer;
         [SerializeField] private List<PlayerSkinSpriteEntry> skinSprites = new();
+        [Header("Identity Anchor")]
+        [SerializeField] private Transform characterNameAnchor;
         [Header("Skin Switch Animation")]
         [SerializeField] private bool animateSkinSwitch = true;
         [SerializeField] private float skinPopScaleMultiplier = 1.12f;
@@ -26,6 +28,7 @@ namespace SeekerDungeon.Solana
         [SerializeField] private float skinPopReturnDuration = 0.12f;
 
         public PlayerSkinId CurrentSkin { get; private set; } = PlayerSkinId.Goblin;
+        public Transform CharacterNameAnchorTransform => characterNameAnchor != null ? characterNameAnchor : transform;
         private Vector3 _skinBaseScale = Vector3.one;
         private Sequence _skinSwitchSequence;
 
@@ -39,6 +42,15 @@ namespace SeekerDungeon.Solana
             if (skinSpriteRenderer != null)
             {
                 _skinBaseScale = skinSpriteRenderer.transform.localScale;
+            }
+
+            if (characterNameAnchor == null)
+            {
+                var fallbackAnchor = transform.Find("NameAnchor");
+                if (fallbackAnchor != null)
+                {
+                    characterNameAnchor = fallbackAnchor;
+                }
             }
         }
 

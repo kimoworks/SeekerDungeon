@@ -249,6 +249,7 @@ namespace SeekerDungeon.Solana
             }
             catch (Exception exception)
             {
+                Debug.LogException(exception);
                 EmitError($"Connect failed: {exception.Message}");
                 return false;
             }
@@ -1016,6 +1017,7 @@ namespace SeekerDungeon.Solana
             if (Web3.Instance != null)
             {
                 ApplyWeb3RpcOverrides(Web3.Instance);
+                EnsureWalletAdapterOptions(Web3.Instance);
                 return;
             }
 
@@ -1023,6 +1025,7 @@ namespace SeekerDungeon.Solana
             DontDestroyOnLoad(web3GameObject);
             var web3 = web3GameObject.AddComponent<Web3>();
             ApplyWeb3RpcOverrides(web3);
+            EnsureWalletAdapterOptions(web3);
         }
 
         private void ApplyWeb3RpcOverrides(Web3 web3)
@@ -1031,6 +1034,21 @@ namespace SeekerDungeon.Solana
             web3.customRpc = rpcUrl;
             web3.webSocketsRpc = ToWebSocketUrl(rpcUrl);
             web3.autoConnectOnStartup = false;
+        }
+
+        private static void EnsureWalletAdapterOptions(Web3 web3)
+        {
+            if (web3 == null)
+            {
+                return;
+            }
+
+            web3.solanaWalletAdapterOptions ??= new SolanaWalletAdapterOptions();
+            web3.solanaWalletAdapterOptions.solanaMobileWalletAdapterOptions ??=
+                new SolanaMobileWalletAdapterOptions();
+            web3.solanaWalletAdapterOptions.solanaWalletAdapterWebGLOptions ??=
+                new SolanaWalletAdapterWebGLOptions();
+            web3.solanaWalletAdapterOptions.phantomWalletOptions ??= new PhantomWalletOptions();
         }
 
         private static string NormalizeRpcUrl(string value, string fallback)

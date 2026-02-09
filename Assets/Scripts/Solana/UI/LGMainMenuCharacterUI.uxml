@@ -5,6 +5,7 @@
             <ui:Button name="btn-disconnect-wallet" text="Disconnect" class="disconnect-button" style="font-size: 30px; margin-top: 13px; margin-bottom: 13px; padding-bottom: 35px; padding-top: 35px; padding-left: 28px; padding-right: 28px;"/>
         </ui:VisualElement>
         <ui:VisualElement name="top-right-actions" class="top-right-actions">
+            <ui:Label name="wallet-network-label" text="DEVNET" class="wallet-network-label"/>
             <ui:VisualElement name="wallet-pill-stack" class="wallet-pill-stack">
                 <ui:VisualElement name="wallet-sol-pill" class="wallet-pill">
                     <ui:VisualElement name="wallet-sol-icon-image" class="wallet-pill-icon-image wallet-sol-icon-image"/>
@@ -27,8 +28,9 @@
                 <ui:Label name="selected-skin-label" text="Cave Goblin" class="selected-skin-label" style="display: none;"/>
                 <ui:Button name="btn-next-skin" text="&gt;" class="skin-nav-button" style="background-image: url(&quot;project://database/Assets/Sprites/selectors.png?fileID=2217153556447756492&amp;guid=f17681645497b7445a814f9e40781059&amp;type=3#selectors_1&quot;); -unity-background-scale-mode: scale-to-fit; background-color: rgba(47, 85, 145, 0); border-top-width: 0; border-right-width: 0; border-bottom-width: 0; border-left-width: 0; color: rgba(244, 248, 255, 0);"/>
             </ui:VisualElement>
-            <ui:Label name="locked-display-name-label" text="" class="locked-name-label" style="display: none;"/>
         </ui:VisualElement>
+        <ui:Label name="pick-character-title-label" text="PICK YOUR CHARACTER" class="pick-character-title-label"/>
+        <ui:Label name="locked-display-name-label" text="" class="locked-name-label" style="display: none;"/>
         <ui:VisualElement name="bottom-center-layer" class="bottom-center-layer">
             <ui:Label name="menu-status-label" text="Loading..." class="status-label" style="font-size: 35px;"/>
             <ui:VisualElement name="create-identity-panel" class="floating-panel identity-panel" style="margin-bottom: 66px;">
@@ -42,6 +44,13 @@
             </ui:VisualElement>
             <ui:VisualElement name="existing-character-container" class="cta-wrap" style="display: none;">
                 <ui:Button name="btn-enter-dungeon" text="ENTER THE DUNGEON" class="action-button"/>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="low-balance-modal-overlay" class="modal-overlay" style="display: none;">
+            <ui:VisualElement name="low-balance-modal-card" class="modal-card">
+                <ui:Label name="low-balance-modal-title" text="LOW BALANCE" class="modal-title"/>
+                <ui:Label name="low-balance-modal-message" text="" class="modal-message"/>
+                <ui:Button name="btn-low-balance-dismiss" text="OK" class="modal-button"/>
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
