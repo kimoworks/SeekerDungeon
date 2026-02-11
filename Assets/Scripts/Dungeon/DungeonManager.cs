@@ -110,6 +110,10 @@ namespace SeekerDungeon.Dungeon
 
             var localWallet = ResolveLocalWalletPublicKey();
             var roomView = room.ToRoomView(localWallet);
+
+            // Check loot receipt PDA to determine if local player already looted
+            roomView.HasLocalPlayerLooted = await _lgManager.CheckHasLocalPlayerLooted();
+
             var occupants = await _lgManager.FetchRoomOccupants(_currentRoomX, _currentRoomY);
             ApplySnapshot(roomView, occupants);
         }
@@ -168,6 +172,14 @@ namespace SeekerDungeon.Dungeon
 
             var localWallet = ResolveLocalWalletPublicKey();
             var roomView = roomAccount.ToRoomView(localWallet);
+
+            // Check loot receipt async, then update snapshot
+            HandleRoomStateUpdatedAsync(roomView).Forget();
+        }
+
+        private async UniTaskVoid HandleRoomStateUpdatedAsync(RoomView roomView)
+        {
+            roomView.HasLocalPlayerLooted = await _lgManager.CheckHasLocalPlayerLooted();
             var snapshot = BuildSnapshot(roomView);
             PushSnapshot(snapshot);
         }
@@ -181,13 +193,18 @@ namespace SeekerDungeon.Dungeon
 
             ApplyOccupants(occupants);
 
-            // GetCurrentRoomView already passes the local wallet for HasLocalPlayerLooted
             var roomView = _lgManager.GetCurrentRoomView();
             if (roomView != null && roomView.X == _currentRoomX && roomView.Y == _currentRoomY)
             {
-                var snapshot = BuildSnapshot(roomView);
-                PushSnapshot(snapshot);
+                HandleRoomOccupantsUpdatedAsync(roomView).Forget();
             }
+        }
+
+        private async UniTaskVoid HandleRoomOccupantsUpdatedAsync(RoomView roomView)
+        {
+            roomView.HasLocalPlayerLooted = await _lgManager.CheckHasLocalPlayerLooted();
+            var snapshot = BuildSnapshot(roomView);
+            PushSnapshot(snapshot);
         }
 
         private void ApplySnapshot(RoomView roomView, IReadOnlyList<RoomOccupantView> occupants)

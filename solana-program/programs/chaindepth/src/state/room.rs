@@ -1,7 +1,5 @@
 use anchor_lang::prelude::*;
 
-/// Maximum players who can loot a chest
-pub const MAX_LOOTERS: usize = 128;
 pub const MAX_BOSS_HP: u64 = 100_000;
 
 /// Direction constants
@@ -84,9 +82,8 @@ pub struct RoomAccount {
     /// Whether boss has been defeated
     pub boss_defeated: bool,
 
-    /// Players who have already looted this chest
-    #[max_len(MAX_LOOTERS)]
-    pub looted_by: Vec<Pubkey>,
+    /// Number of players who have looted this chest (loot tracking moved to LootReceipt PDAs)
+    pub looted_count: u32,
 
     /// Wallet that first discovered/created this room
     pub created_by: Pubkey,
@@ -158,11 +155,6 @@ impl RoomAccount {
     /// Check if wall at direction is open (passable)
     pub fn is_open(&self, direction: u8) -> bool {
         self.walls[direction as usize] == WALL_OPEN
-    }
-
-    /// Check if player has already looted this chest
-    pub fn has_looted(&self, player: &Pubkey) -> bool {
-        self.looted_by.contains(player)
     }
 
     pub fn is_valid_center_type(center_type: u8) -> bool {

@@ -100,7 +100,7 @@ pub fn handler(ctx: Context<InitGlobal>, initial_prize_pool_amount: u64, season_
     start_room.boss_total_dps = 0;
     start_room.boss_fighter_count = 0;
     start_room.boss_defeated = false;
-    start_room.looted_by = Vec::new();
+    start_room.looted_count = 0;
     start_room.created_by = ctx.accounts.admin.key();
     start_room.created_slot = clock.slot;
     start_room.bump = ctx.bumps.start_room;

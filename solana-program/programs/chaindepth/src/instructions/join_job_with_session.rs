@@ -22,7 +22,7 @@ pub struct JoinJobWithSession<'info> {
         seeds = [GlobalAccount::SEED_PREFIX],
         bump = global.bump
     )]
-    pub global: Account<'info, GlobalAccount>,
+    pub global: Box<Account<'info, GlobalAccount>>,
 
     #[account(
         mut,
@@ -30,7 +30,7 @@ pub struct JoinJobWithSession<'info> {
         bump = player_account.bump,
         constraint = player_account.owner == player.key()
     )]
-    pub player_account: Account<'info, PlayerAccount>,
+    pub player_account: Box<Account<'info, PlayerAccount>>,
 
     /// Room where the job is
     #[account(
@@ -43,7 +43,7 @@ pub struct JoinJobWithSession<'info> {
         ],
         bump
     )]
-    pub room: Account<'info, RoomAccount>,
+    pub room: Box<Account<'info, RoomAccount>>,
 
     /// CHECK: validated in handler against expected RoomPresence PDA and ownership.
     #[account(mut)]
@@ -58,7 +58,7 @@ pub struct JoinJobWithSession<'info> {
         seeds = [b"escrow", room.key().as_ref(), &[direction]],
         bump
     )]
-    pub escrow: Account<'info, TokenAccount>,
+    pub escrow: Box<Account<'info, TokenAccount>>,
 
     /// Per-helper stake marker for this room+direction.
     #[account(
@@ -73,7 +73,7 @@ pub struct JoinJobWithSession<'info> {
         ],
         bump
     )]
-    pub helper_stake: Account<'info, HelperStake>,
+    pub helper_stake: Box<Account<'info, HelperStake>>,
 
     /// Player's SKR token account
     #[account(
@@ -81,11 +81,11 @@ pub struct JoinJobWithSession<'info> {
         constraint = player_token_account.mint == global.skr_mint,
         constraint = player_token_account.owner == player.key()
     )]
-    pub player_token_account: Account<'info, TokenAccount>,
+    pub player_token_account: Box<Account<'info, TokenAccount>>,
 
     /// SKR mint
     #[account(constraint = skr_mint.key() == global.skr_mint)]
-    pub skr_mint: Account<'info, anchor_spl::token::Mint>,
+    pub skr_mint: Box<Account<'info, anchor_spl::token::Mint>>,
 
     #[account(
         mut,
@@ -96,7 +96,7 @@ pub struct JoinJobWithSession<'info> {
         ],
         bump = session_authority.bump
     )]
-    pub session_authority: Account<'info, SessionAuthority>,
+    pub session_authority: Box<Account<'info, SessionAuthority>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,

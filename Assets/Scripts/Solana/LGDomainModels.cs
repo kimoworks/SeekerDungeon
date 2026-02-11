@@ -139,7 +139,7 @@ namespace SeekerDungeon.Solana
         public sbyte Y { get; init; }
         public RoomCenterType CenterType { get; init; }
         public int LootedCount { get; init; }
-        public bool HasLocalPlayerLooted { get; init; }
+        public bool HasLocalPlayerLooted { get; set; }
         public PublicKey CreatedBy { get; init; }
         public IReadOnlyDictionary<RoomDirection, DoorJobView> Doors { get; init; }
         private MonsterView _monster;
@@ -232,27 +232,16 @@ namespace SeekerDungeon.Solana
             doors[RoomDirection.East] = BuildDoor(room, RoomDirection.East);
             doors[RoomDirection.West] = BuildDoor(room, RoomDirection.West);
 
-            var hasLocalPlayerLooted = false;
-            if (localPlayerWallet != null && room.LootedBy != null)
-            {
-                var walletKey = localPlayerWallet.Key;
-                foreach (var looter in room.LootedBy)
-                {
-                    if (looter != null && looter.Key == walletKey)
-                    {
-                        hasLocalPlayerLooted = true;
-                        break;
-                    }
-                }
-            }
+            // HasLocalPlayerLooted is now determined by checking the LootReceipt PDA
+            // via RPC (done asynchronously after mapping). Defaults to false here.
 
             var roomView = new RoomView
             {
                 X = room.X,
                 Y = room.Y,
                 CenterType = ToCenterType(room.CenterType),
-                LootedCount = room.LootedBy?.Length ?? 0,
-                HasLocalPlayerLooted = hasLocalPlayerLooted,
+                LootedCount = (int)room.LootedCount,
+                HasLocalPlayerLooted = false,
                 CreatedBy = room.CreatedBy,
                 Doors = doors
             };

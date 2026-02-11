@@ -168,10 +168,12 @@ pub fn handler(ctx: Context<CompleteJob>, direction: u8) -> Result<()> {
     }
 
     let opposite_dir = RoomAccount::opposite_direction(direction);
+    let is_new_adjacent_room;
     {
         let adjacent = &mut ctx.accounts.adjacent_room;
+        is_new_adjacent_room = adjacent.season_seed == 0;
 
-        if adjacent.season_seed == 0 {
+        if is_new_adjacent_room {
             adjacent.x = adjacent_x(room_x, direction);
             adjacent.y = adjacent_y(room_y, direction);
             adjacent.season_seed = season_seed;
@@ -203,7 +205,7 @@ pub fn handler(ctx: Context<CompleteJob>, direction: u8) -> Result<()> {
             adjacent.boss_total_dps = 0;
             adjacent.boss_fighter_count = 0;
             adjacent.boss_defeated = false;
-            adjacent.looted_by = Vec::new();
+            adjacent.looted_count = 0;
             adjacent.created_by = ctx.accounts.player.key();
             adjacent.created_slot = clock.slot;
             adjacent.bump = ctx.bumps.adjacent_room;
@@ -225,6 +227,22 @@ pub fn handler(ctx: Context<CompleteJob>, direction: u8) -> Result<()> {
             return_wall_state == WALL_OPEN,
             ChainDepthError::WallNotOpen
         );
+    }
+
+    // Reimburse authority for adjacent room creation rent from treasury
+    if is_new_adjacent_room {
+        let room_space = 8 + std::mem::size_of::<RoomAccount>();
+        let rent_cost = Rent::get()?.minimum_balance(room_space);
+        let global_info = ctx.accounts.global.to_account_info();
+        let authority_info = ctx.accounts.authority.to_account_info();
+        **global_info.try_borrow_mut_lamports()? = global_info
+            .lamports()
+            .checked_sub(rent_cost)
+            .ok_or(ChainDepthError::TreasuryInsufficientFunds)?;
+        **authority_info.try_borrow_mut_lamports()? = authority_info
+            .lamports()
+            .checked_add(rent_cost)
+            .ok_or(ChainDepthError::Overflow)?;
     }
 
     let new_depth = calculate_depth(ctx.accounts.adjacent_room.x, ctx.accounts.adjacent_room.y);

@@ -35,6 +35,7 @@ namespace SeekerDungeon.Solana
         public const string PROFILE_SEED = "profile";
         public const string PRESENCE_SEED = "presence";
         public const string PRIZE_POOL_SEED = "prize_pool";
+        public const string LOOT_RECEIPT_SEED = "loot_receipt";
         
         // Game constants
         public const int START_X = 5;

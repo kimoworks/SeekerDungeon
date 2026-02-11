@@ -4,8 +4,8 @@ use crate::errors::ChainDepthError;
 use crate::events::{item_types, ChestLooted};
 use crate::instructions::session_auth::authorize_player_action;
 use crate::state::{
-    item_ids, session_instruction_bits, GlobalAccount, InventoryAccount, PlayerAccount,
-    RoomAccount, SessionAuthority, MAX_LOOTERS, CENTER_CHEST,
+    item_ids, session_instruction_bits, GlobalAccount, InventoryAccount, LootReceipt,
+    PlayerAccount, RoomAccount, SessionAuthority, CENTER_CHEST,
 };
 
 #[derive(Accounts)]
@@ -16,7 +16,9 @@ pub struct LootChest<'info> {
     /// CHECK: wallet owner whose gameplay state is being modified
     pub player: UncheckedAccount<'info>,
 
+    /// Global game state - also treasury for reimbursement
     #[account(
+        mut,
         seeds = [GlobalAccount::SEED_PREFIX],
         bump = global.bump
     )]
@@ -51,6 +53,22 @@ pub struct LootChest<'info> {
     )]
     pub inventory: Account<'info, InventoryAccount>,
 
+    /// Per-player loot receipt - existence proves player already looted
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = LootReceipt::DISCRIMINATOR.len() + LootReceipt::INIT_SPACE,
+        seeds = [
+            LootReceipt::SEED_PREFIX,
+            &global.season_seed.to_le_bytes(),
+            &[player_account.current_room_x as u8],
+            &[player_account.current_room_y as u8],
+            player.key().as_ref()
+        ],
+        bump
+    )]
+    pub loot_receipt: Account<'info, LootReceipt>,
+
     #[account(
         mut,
         seeds = [
@@ -77,6 +95,7 @@ pub fn handler(ctx: Context<LootChest>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     let player_account = &mut ctx.accounts.player_account;
     let inventory = &mut ctx.accounts.inventory;
+    let loot_receipt = &mut ctx.accounts.loot_receipt;
     let player_key = ctx.accounts.player.key();
     let clock = Clock::get()?;
 
@@ -88,17 +107,21 @@ pub fn handler(ctx: Context<LootChest>) -> Result<()> {
         ChainDepthError::NotInRoom
     );
 
-    // Check player hasn't already looted
-    require!(!room.has_looted(&player_key), ChainDepthError::AlreadyLooted);
-
-    // Check we haven't hit max looters
+    // Check player hasn't already looted (receipt already initialized = already looted)
     require!(
-        room.looted_by.len() < MAX_LOOTERS,
-        ChainDepthError::MaxLootersReached
+        loot_receipt.player == Pubkey::default(),
+        ChainDepthError::AlreadyLooted
     );
 
-    // Add player to looted list
-    room.looted_by.push(player_key);
+    // Initialize the loot receipt
+    loot_receipt.player = player_key;
+    loot_receipt.season_seed = ctx.accounts.global.season_seed;
+    loot_receipt.room_x = room.x;
+    loot_receipt.room_y = room.y;
+    loot_receipt.bump = ctx.bumps.loot_receipt;
+
+    // Update room looted count and player stats
+    room.looted_count += 1;
     player_account.chests_looted += 1;
 
     // Generate deterministic loot based on slot + player pubkey

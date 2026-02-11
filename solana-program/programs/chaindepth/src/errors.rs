@@ -62,8 +62,8 @@ pub enum ChainDepthError {
     #[msg("Already looted this chest")]
     AlreadyLooted,
 
-    #[msg("This chest has reached the maximum number of looters")]
-    MaxLootersReached,
+    #[msg("Treasury has insufficient SOL to reimburse room rent")]
+    TreasuryInsufficientFunds,
 
     #[msg("Player not in this room")]
     NotInRoom,

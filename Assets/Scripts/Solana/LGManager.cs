@@ -370,6 +370,33 @@ namespace SeekerDungeon.Solana
         }
 
         /// <summary>
+        /// Derive loot receipt PDA for player+room (existence = already looted)
+        /// </summary>
+        public PublicKey DeriveLootReceiptPda(ulong seasonSeed, int roomX, int roomY, PublicKey playerPubkey)
+        {
+            var seasonBytes = BitConverter.GetBytes(seasonSeed);
+            if (!BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(seasonBytes);
+            }
+
+            var success = PublicKey.TryFindProgramAddress(
+                new List<byte[]>
+                {
+                    Encoding.UTF8.GetBytes(LGConfig.LOOT_RECEIPT_SEED),
+                    seasonBytes,
+                    new[] { (byte)(sbyte)roomX },
+                    new[] { (byte)(sbyte)roomY },
+                    playerPubkey.KeyBytes
+                },
+                _programId,
+                out var pda,
+                out _
+            );
+            return success ? pda : null;
+        }
+
+        /// <summary>
         /// Derive boss fight PDA for room/player
         /// </summary>
         public PublicKey DeriveBossFightPda(PublicKey roomPda, PublicKey playerPubkey)
@@ -608,6 +635,34 @@ namespace SeekerDungeon.Solana
         {
             var wallet = Web3.Wallet?.Account?.PublicKey;
             return CurrentRoomState.ToRoomView(wallet);
+        }
+
+        /// <summary>
+        /// Check if the local player has already looted the current room via LootReceipt PDA
+        /// </summary>
+        public async UniTask<bool> CheckHasLocalPlayerLooted()
+        {
+            if (Web3.Wallet == null || CurrentGlobalState == null || CurrentPlayerState == null)
+                return false;
+
+            var playerPubkey = Web3.Wallet.Account.PublicKey;
+            var receiptPda = DeriveLootReceiptPda(
+                CurrentGlobalState.SeasonSeed,
+                CurrentPlayerState.CurrentRoomX,
+                CurrentPlayerState.CurrentRoomY,
+                playerPubkey);
+
+            if (receiptPda == null) return false;
+
+            try
+            {
+                var accountInfo = await Web3.Rpc.GetAccountInfoAsync(receiptPda.Key);
+                return accountInfo?.Result?.Value != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -1745,6 +1800,11 @@ namespace SeekerDungeon.Solana
                             CurrentPlayerState.CurrentRoomX,
                             CurrentPlayerState.CurrentRoomY);
                         var inventoryPda = DeriveInventoryPda(context.Player);
+                        var lootReceiptPda = DeriveLootReceiptPda(
+                            CurrentGlobalState.SeasonSeed,
+                            CurrentPlayerState.CurrentRoomX,
+                            CurrentPlayerState.CurrentRoomY,
+                            context.Player);
 
                         return ChaindepthProgram.LootChest(
                             new LootChestAccounts
@@ -1755,6 +1815,7 @@ namespace SeekerDungeon.Solana
                                 PlayerAccount = playerPda,
                                 Room = roomPda,
                                 Inventory = inventoryPda,
+                                LootReceipt = lootReceiptPda,
                                 SessionAuthority = context.SessionAuthority,
                                 SystemProgram = SystemProgram.ProgramIdKey
                             },
@@ -2143,6 +2204,11 @@ namespace SeekerDungeon.Solana
                         );
                         var bossFightPda = DeriveBossFightPda(roomPda, context.Player);
                         var inventoryPda = DeriveInventoryPda(context.Player);
+                        var lootReceiptPda = DeriveLootReceiptPda(
+                            CurrentGlobalState.SeasonSeed,
+                            CurrentPlayerState.CurrentRoomX,
+                            CurrentPlayerState.CurrentRoomY,
+                            context.Player);
 
                         return ChaindepthProgram.LootBoss(
                             new LootBossAccounts
@@ -2155,6 +2221,7 @@ namespace SeekerDungeon.Solana
                                 RoomPresence = roomPresencePda,
                                 BossFight = bossFightPda,
                                 Inventory = inventoryPda,
+                                LootReceipt = lootReceiptPda,
                                 SessionAuthority = context.SessionAuthority,
                                 SystemProgram = SystemProgram.ProgramIdKey
                             },

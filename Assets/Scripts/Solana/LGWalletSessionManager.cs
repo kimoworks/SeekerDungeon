@@ -134,8 +134,8 @@ namespace SeekerDungeon.Solana
         // BeginGameplaySessionAsync (see HardMinLamports). These fields are
         // kept for inspector visibility but no longer gate the funding logic.
         [SerializeField] private bool allowWalletAdapterSessionOnAndroid = true;
-        private const ulong SessionSignerMinLamports = 50_000_000UL;  // 0.05 SOL
-        private const ulong SessionSignerTopUpLamports = 100_000_000UL; // 0.1 SOL
+        private const ulong SessionSignerMinLamports = 10_000_000UL;   // 0.01 SOL
+        private const ulong SessionSignerTopUpLamports = 20_000_000UL; // 0.02 SOL (treasury reimburses room rent)
         [SerializeField] private int defaultAllowlistMask =
             (int)(
                 SessionInstructionAllowlist.MovePlayer |
@@ -518,10 +518,10 @@ namespace SeekerDungeon.Solana
             // in rent, so this must be unconditional and generous.
             EmitStatus($"[{attemptTag}] SessionSignerTopUpLamports={SessionSignerTopUpLamports} SessionSignerMinLamports={SessionSignerMinLamports}");
             {
-                // MovePlayer needs rent for init_if_needed on RoomAccount
-                // (~4384 bytes = ~0.031 SOL) + RoomPresence (~0.001 SOL) +
-                // tx fees. 0.1 SOL covers ~3 new rooms of exploration.
-                const ulong HardMinLamports = 100_000_000UL; // 0.1 SOL
+                // After treasury refactor, room rent is reimbursed by GlobalAccount PDA.
+                // Session signer only fronts rent temporarily (~0.003 SOL per room)
+                // plus tx fees (~0.000005 SOL each). 0.02 SOL is ample.
+                const ulong HardMinLamports = 20_000_000UL; // 0.02 SOL
                 var sessionTopUpAmount = Math.Max(
                     Math.Max(SessionSignerTopUpLamports, SessionSignerMinLamports),
                     HardMinLamports);

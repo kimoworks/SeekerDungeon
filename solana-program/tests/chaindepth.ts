@@ -226,3 +226,22 @@ export function derivePrizePoolPda(
     programId
   );
 }
+
+export function deriveLootReceiptPda(
+  programId: anchor.web3.PublicKey,
+  seasonSeed: anchor.BN,
+  roomX: number,
+  roomY: number,
+  playerPubkey: anchor.web3.PublicKey
+): [anchor.web3.PublicKey, number] {
+  return anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("loot_receipt"),
+      seasonSeed.toArrayLike(Buffer, "le", 8),
+      Buffer.from([roomX]),
+      Buffer.from([roomY]),
+      playerPubkey.toBuffer(),
+    ],
+    programId
+  );
+}

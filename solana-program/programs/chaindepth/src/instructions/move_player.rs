@@ -17,7 +17,9 @@ pub struct MovePlayer<'info> {
     /// CHECK: wallet owner whose gameplay state is being modified
     pub player: UncheckedAccount<'info>,
 
+    /// Global game state - also acts as the SOL treasury for room creation rent
     #[account(
+        mut,
         seeds = [GlobalAccount::SEED_PREFIX],
         bump = global.bump
     )]
@@ -68,10 +70,10 @@ pub struct MovePlayer<'info> {
     )]
     pub target_room: Account<'info, RoomAccount>,
 
+    /// Closed on move so rent returns to the treasury (global PDA)
     #[account(
-        init_if_needed,
-        payer = authority,
-        space = RoomPresence::DISCRIMINATOR.len() + RoomPresence::INIT_SPACE,
+        mut,
+        close = global,
         seeds = [
             RoomPresence::SEED_PREFIX,
             &global.season_seed.to_le_bytes(),
@@ -79,7 +81,7 @@ pub struct MovePlayer<'info> {
             &[player_account.current_room_y as u8],
             player.key().as_ref()
         ],
-        bump
+        bump = current_presence.bump
     )]
     pub current_presence: Account<'info, RoomPresence>,
 
@@ -161,17 +163,8 @@ pub fn handler(ctx: Context<MovePlayer>, new_x: i8, new_y: i8) -> Result<()> {
     let from_x = player_account.current_room_x;
     let from_y = player_account.current_room_y;
 
-    upsert_presence(
-        &mut ctx.accounts.current_presence,
-        player_key,
-        season_seed,
-        from_x,
-        from_y,
-        profile.skin_id,
-        player_account.equipped_item_id,
-        ctx.bumps.current_presence,
-    );
-    ctx.accounts.current_presence.is_current = false;
+    // current_presence will be closed by Anchor (close = global),
+    // returning rent to the treasury. No need to update fields.
 
     // Check adjacency (only 1 step in cardinal direction)
     let dx = (new_x - from_x).abs();
@@ -210,7 +203,8 @@ pub fn handler(ctx: Context<MovePlayer>, new_x: i8, new_y: i8) -> Result<()> {
 
     let opposite_direction = RoomAccount::opposite_direction(direction);
     let target_room = &mut ctx.accounts.target_room;
-    if target_room.season_seed == 0 {
+    let is_new_room = target_room.season_seed == 0;
+    if is_new_room {
         let room_depth = calculate_depth(new_x, new_y);
         let room_hash = generate_room_hash(season_seed, new_x, new_y);
 
@@ -242,7 +236,7 @@ pub fn handler(ctx: Context<MovePlayer>, new_x: i8, new_y: i8) -> Result<()> {
         target_room.boss_total_dps = 0;
         target_room.boss_fighter_count = 0;
         target_room.boss_defeated = false;
-        target_room.looted_by = Vec::new();
+        target_room.looted_count = 0;
         target_room.created_by = player_key;
         target_room.created_slot = Clock::get()?.slot;
         target_room.bump = ctx.bumps.target_room;
@@ -264,6 +258,22 @@ pub fn handler(ctx: Context<MovePlayer>, new_x: i8, new_y: i8) -> Result<()> {
     let room_depth = calculate_depth(new_x, new_y);
     if room_depth > ctx.accounts.global.depth {
         ctx.accounts.global.depth = room_depth;
+    }
+
+    // Reimburse authority for room creation rent from treasury (global PDA)
+    if is_new_room {
+        let room_space = 8 + std::mem::size_of::<RoomAccount>();
+        let rent_cost = Rent::get()?.minimum_balance(room_space);
+        let global_info = ctx.accounts.global.to_account_info();
+        let authority_info = ctx.accounts.authority.to_account_info();
+        **global_info.try_borrow_mut_lamports()? = global_info
+            .lamports()
+            .checked_sub(rent_cost)
+            .ok_or(ChainDepthError::TreasuryInsufficientFunds)?;
+        **authority_info.try_borrow_mut_lamports()? = authority_info
+            .lamports()
+            .checked_add(rent_cost)
+            .ok_or(ChainDepthError::Overflow)?;
     }
 
     // Update player position
