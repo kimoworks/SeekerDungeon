@@ -130,11 +130,12 @@ namespace SeekerDungeon.Solana
         [SerializeField] private bool autoBeginSessionAfterConnect;
         [SerializeField] private int sessionDurationMinutes = 60;
         [SerializeField] private ulong defaultSessionMaxTokenSpend = 200_000_000UL;
-        [SerializeField] private bool autoFundSessionSigner = true;
-        [SerializeField] private bool bundleSessionTopUpWithBeginSession = false;
+        // NOTE: funding is now always bundled unconditionally in
+        // BeginGameplaySessionAsync (see HardMinLamports). These fields are
+        // kept for inspector visibility but no longer gate the funding logic.
         [SerializeField] private bool allowWalletAdapterSessionOnAndroid = true;
-        [SerializeField] private ulong sessionSignerMinLamports = 5_000_000UL;
-        [SerializeField] private ulong sessionSignerTopUpLamports = 10_000_000UL;
+        private const ulong SessionSignerMinLamports = 50_000_000UL;  // 0.05 SOL
+        private const ulong SessionSignerTopUpLamports = 100_000_000UL; // 0.1 SOL
         [SerializeField] private int defaultAllowlistMask =
             (int)(
                 SessionInstructionAllowlist.MovePlayer |
@@ -466,7 +467,7 @@ namespace SeekerDungeon.Solana
             var allowlist = (ulong)resolvedAllowlist;
             var maxTokenSpend = maxTokenSpendOverride ?? defaultSessionMaxTokenSpend;
             EmitStatus(
-                $"[{attemptTag}] Params durationMinutes={durationMinutes} allowlist=0x{allowlist:X} maxTokenSpend={maxTokenSpend}");
+                $"[{attemptTag}] Params durationMinutes={durationMinutes} allowlist=0x{allowlist:X} maxTokenSpend={maxTokenSpend} (serialized default={defaultSessionMaxTokenSpend})");
 
             if (allowlist == 0)
             {
@@ -510,25 +511,26 @@ namespace SeekerDungeon.Solana
             );
 
             var instructions = new List<TransactionInstruction>();
-            // On wallet adapter (MWA), always bundle the SOL top-up into the
-            // begin_session transaction regardless of inspector flags. The session
-            // signer NEEDS SOL to pay gameplay tx fees, and a separate
-            // wallet.Transfer() would trigger a second wallet popup or fail.
-            var isWalletAdapterMode = ActiveWalletMode == WalletLoginMode.WalletAdapter;
-            var shouldBundleTopUp = isWalletAdapterMode ||
-                (autoFundSessionSigner && bundleSessionTopUpWithBeginSession);
-            if (shouldBundleTopUp)
+            // ALWAYS bundle the SOL top-up into the begin_session transaction.
+            // The session signer MUST have SOL to pay gameplay tx fees
+            // (MovePlayer, JoinJob etc. use init_if_needed with
+            // payer = session authority). RoomAccount alone needs ~0.031 SOL
+            // in rent, so this must be unconditional and generous.
+            EmitStatus($"[{attemptTag}] SessionSignerTopUpLamports={SessionSignerTopUpLamports} SessionSignerMinLamports={SessionSignerMinLamports}");
             {
-                var sessionTopUpAmount = Math.Max(sessionSignerTopUpLamports, sessionSignerMinLamports);
-                if (sessionTopUpAmount > 0)
-                {
-                    instructions.Add(SystemProgram.Transfer(
-                        player,
-                        _sessionSignerAccount.PublicKey,
-                        sessionTopUpAmount));
-                    EmitStatus(
-                        $"[{attemptTag}] Bundling session signer top-up ({sessionTopUpAmount / 1_000_000_000d:F6} SOL). Approve in wallet...");
-                }
+                // MovePlayer needs rent for init_if_needed on RoomAccount
+                // (~4384 bytes = ~0.031 SOL) + RoomPresence (~0.001 SOL) +
+                // tx fees. 0.1 SOL covers ~3 new rooms of exploration.
+                const ulong HardMinLamports = 100_000_000UL; // 0.1 SOL
+                var sessionTopUpAmount = Math.Max(
+                    Math.Max(SessionSignerTopUpLamports, SessionSignerMinLamports),
+                    HardMinLamports);
+                instructions.Add(SystemProgram.Transfer(
+                    player,
+                    _sessionSignerAccount.PublicKey,
+                    sessionTopUpAmount));
+                EmitStatus(
+                    $"[{attemptTag}] Bundling session signer top-up ({sessionTopUpAmount / 1_000_000_000d:F6} SOL).");
             }
 
             instructions.Add(instruction);
@@ -550,19 +552,9 @@ namespace SeekerDungeon.Solana
             }
 
             _hasActiveOnchainSession = true;
-            _isSessionSignerFunded = shouldBundleTopUp;
+            _isSessionSignerFunded = true; // SOL top-up is always bundled above
             OnSessionStateChanged?.Invoke(true);
             EmitStatus($"[{attemptTag}] Session started. Session key={_sessionSignerAccount.PublicKey} tx={signature} funded={_isSessionSignerFunded}");
-
-            if (autoFundSessionSigner && !shouldBundleTopUp)
-            {
-                EmitStatus($"[{attemptTag}] begin_session confirmed. Funding session signer in separate transaction...");
-                var funded = await EnsureSessionSignerFundedAsync(emitPromptStatus: true);
-                if (!funded)
-                {
-                    EmitError($"[{attemptTag}] Session started but signer funding failed.");
-                }
-            }
 
             return true;
         }
@@ -771,7 +763,7 @@ namespace SeekerDungeon.Solana
             }
 
             var currentLamports = sessionBalanceResult.Result.Value;
-            if (currentLamports >= sessionSignerMinLamports)
+            if (currentLamports >= SessionSignerMinLamports)
             {
                 _isSessionSignerFunded = true;
                 return true;
@@ -787,12 +779,12 @@ namespace SeekerDungeon.Solana
 
             if (emitPromptStatus)
             {
-                var needed = Math.Max(sessionSignerTopUpLamports, sessionSignerMinLamports - currentLamports);
+                var needed = Math.Max(SessionSignerTopUpLamports, SessionSignerMinLamports - currentLamports);
                 EmitStatus(
                     $"Funding session wallet ({needed / 1_000_000_000d:F6} SOL). Approve in wallet...");
             }
 
-            var topUpAmount = Math.Max(sessionSignerTopUpLamports, sessionSignerMinLamports - currentLamports);
+            var topUpAmount = Math.Max(SessionSignerTopUpLamports, SessionSignerMinLamports - currentLamports);
             var transferResult = await wallet.Transfer(
                 _sessionSignerAccount.PublicKey,
                 topUpAmount,

@@ -170,6 +170,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Dungeon.DungeonChestVisualController
   logDebugMessages: 0
+  closedVisual: {fileID: 9197238709631379869}
+  openVisual: {fileID: 2874530517391162020}
 --- !u!1 &2874530517391162020
 GameObject:
   m_ObjectHideFlags: 0
@@ -182,7 +184,7 @@ GameObject:
   - component: {fileID: 9043107129536339092}
   - component: {fileID: 768760425159312340}
   m_Layer: 6
-  m_Name: chest closed
+  m_Name: chest open
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -449,7 +451,7 @@ GameObject:
   - component: {fileID: 6411463648937984699}
   - component: {fileID: 8409436682963497031}
   m_Layer: 6
-  m_Name: chest open
+  m_Name: chest closed
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

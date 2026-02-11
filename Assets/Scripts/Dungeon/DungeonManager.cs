@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using SeekerDungeon;
 using SeekerDungeon.Solana;
 using Solana.Unity.SDK;
+using Solana.Unity.Wallet;
 using UnityEngine;
 
 namespace SeekerDungeon.Dungeon
@@ -107,7 +108,8 @@ namespace SeekerDungeon.Dungeon
                 return;
             }
 
-            var roomView = room.ToRoomView();
+            var localWallet = ResolveLocalWalletPublicKey();
+            var roomView = room.ToRoomView(localWallet);
             var occupants = await _lgManager.FetchRoomOccupants(_currentRoomX, _currentRoomY);
             ApplySnapshot(roomView, occupants);
         }
@@ -164,7 +166,8 @@ namespace SeekerDungeon.Dungeon
                 return;
             }
 
-            var roomView = roomAccount.ToRoomView();
+            var localWallet = ResolveLocalWalletPublicKey();
+            var roomView = roomAccount.ToRoomView(localWallet);
             var snapshot = BuildSnapshot(roomView);
             PushSnapshot(snapshot);
         }
@@ -178,6 +181,7 @@ namespace SeekerDungeon.Dungeon
 
             ApplyOccupants(occupants);
 
+            // GetCurrentRoomView already passes the local wallet for HasLocalPlayerLooted
             var roomView = _lgManager.GetCurrentRoomView();
             if (roomView != null && roomView.X == _currentRoomX && roomView.Y == _currentRoomY)
             {
@@ -631,6 +635,17 @@ namespace SeekerDungeon.Dungeon
             }
 
             return _lgManager?.CurrentPlayerState?.Owner?.Key ?? string.Empty;
+        }
+
+        private PublicKey ResolveLocalWalletPublicKey()
+        {
+            var pubKey = Web3.Wallet?.Account?.PublicKey;
+            if (pubKey != null)
+            {
+                return pubKey;
+            }
+
+            return _lgManager?.CurrentPlayerState?.Owner;
         }
 
         private string ResolveLocalDisplayName()

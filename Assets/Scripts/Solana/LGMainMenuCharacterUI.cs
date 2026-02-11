@@ -9,6 +9,7 @@ namespace SeekerDungeon.Solana
     {
         private const int SkinLabelMaxFontSize = 49;
         private const int SkinLabelMinFontSize = 24;
+        private const float SpinnerDegreesPerSecond = 360f;
 
         [SerializeField] private LGMainMenuCharacterManager characterManager;
 
@@ -35,6 +36,12 @@ namespace SeekerDungeon.Solana
         private Label _lowBalanceModalMessageLabel;
         private VisualElement _walletSessionIconInactive;
         private VisualElement _walletSessionIconActive;
+        private VisualElement _loadingOverlay;
+        private VisualElement _loadingSpinner;
+        private Label _loadingLabel;
+        private VisualElement _topLeftActions;
+        private VisualElement _topRightActions;
+        private VisualElement _bottomCenterLayer;
         private Button _previousSkinButton;
         private Button _nextSkinButton;
         private Button _confirmCreateButton;
@@ -48,6 +55,8 @@ namespace SeekerDungeon.Solana
         private bool _isApplyingKeyboardText;
         private VisualElement _boundRoot;
         private bool _isHandlersBound;
+        private bool _hasRevealedUi;
+        private float _spinnerAngle;
 
         private void Awake()
         {
@@ -62,6 +71,7 @@ namespace SeekerDungeon.Solana
 
         private void OnEnable()
         {
+            _hasRevealedUi = false;
             TryRebindUi(force: true);
             if (characterManager != null)
             {
@@ -104,6 +114,12 @@ namespace SeekerDungeon.Solana
             _existingContainer = root.Q<VisualElement>("existing-character-container");
             _topCenterLayer = root.Q<VisualElement>("top-center-layer");
             _skinNavPanel = root.Q<VisualElement>("skin-nav-row");
+            _loadingOverlay = root.Q<VisualElement>("loading-overlay");
+            _loadingSpinner = root.Q<VisualElement>("loading-spinner");
+            _loadingLabel = root.Q<Label>("loading-label");
+            _topLeftActions = root.Q<VisualElement>("top-left-actions");
+            _topRightActions = root.Q<VisualElement>("top-right-actions");
+            _bottomCenterLayer = root.Q<VisualElement>("bottom-center-layer");
             _skinNameLabel = root.Q<Label>("selected-skin-label");
             _displayNameInput = root.Q<TextField>("display-name-input");
             _statusLabel = root.Q<Label>("menu-status-label");
@@ -325,6 +341,15 @@ namespace SeekerDungeon.Solana
                 TryRebindUi();
             }
 
+            // Animate loading spinner rotation
+            if (_loadingSpinner != null &&
+                _loadingOverlay != null &&
+                _loadingOverlay.resolvedStyle.display == DisplayStyle.Flex)
+            {
+                _spinnerAngle = (_spinnerAngle + SpinnerDegreesPerSecond * Time.unscaledDeltaTime) % 360f;
+                _loadingSpinner.style.rotate = new Rotate(_spinnerAngle);
+            }
+
             if (!Application.isMobilePlatform || _mobileKeyboard == null)
             {
                 return;
@@ -354,6 +379,52 @@ namespace SeekerDungeon.Solana
                 return;
             }
 
+            // ── Loading / Ready state ──
+            var isLoading = !state.IsReady;
+            if (_loadingOverlay != null)
+            {
+                _loadingOverlay.style.display = isLoading ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            if (_loadingLabel != null && isLoading)
+            {
+                _loadingLabel.text = string.IsNullOrWhiteSpace(state.StatusMessage)
+                    ? "Loading..."
+                    : state.StatusMessage;
+            }
+
+            // Hide all interactive chrome while data is loading
+            if (_topLeftActions != null)
+            {
+                _topLeftActions.style.display = isLoading ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (_topRightActions != null)
+            {
+                _topRightActions.style.display = isLoading ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (_topCenterLayer != null && isLoading)
+            {
+                _topCenterLayer.style.display = DisplayStyle.None;
+            }
+
+            if (_bottomCenterLayer != null)
+            {
+                _bottomCenterLayer.style.display = isLoading ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (_pickCharacterTitleLabel != null && isLoading)
+            {
+                _pickCharacterTitleLabel.style.display = DisplayStyle.None;
+            }
+
+            if (isLoading)
+            {
+                return;
+            }
+
+            // ── Normal (ready) state handling ──
             if (_skinNameLabel != null)
             {
                 _skinNameLabel.style.display = DisplayStyle.None;
@@ -498,6 +569,7 @@ namespace SeekerDungeon.Solana
 
             if (_topCenterLayer != null)
             {
+                _topCenterLayer.style.display = DisplayStyle.Flex;
                 _topCenterLayer.style.top = Length.Percent(isLockedProfile ? 32f : 44f);
             }
 
@@ -506,14 +578,14 @@ namespace SeekerDungeon.Solana
 
             if (_confirmCreateButton != null)
             {
-                _confirmCreateButton.text = (state.HasProfile
+                _confirmCreateButton.text = state.HasProfile
                     ? "Save Character"
-                    : "Create Character").ToUpperInvariant();
+                    : "Create Character";
             }
 
             if (_enterDungeonButton != null)
             {
-                _enterDungeonButton.text = "ENTER THE DUNGEON";
+                _enterDungeonButton.text = "Enter the Dungeon";
             }
 
             _previousSkinButton?.SetEnabled(canEditProfile);

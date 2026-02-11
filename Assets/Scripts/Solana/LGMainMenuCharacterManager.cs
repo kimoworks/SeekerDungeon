@@ -164,8 +164,14 @@ namespace SeekerDungeon.Solana
             }
         }
 
+        private const string BlackScreenHoldReason = "menu_data_ready";
+
         private void Awake()
         {
+            // Keep the screen black until profile data has loaded so the
+            // SceneLoadController performs a single clean fade-from-black.
+            SceneLoadController.GetOrCreate().HoldBlackScreen(BlackScreenHoldReason);
+
             if (lgManager == null)
             {
                 lgManager = LGManager.EnsureInstance();
@@ -456,12 +462,14 @@ namespace SeekerDungeon.Solana
             if (lgManager == null)
             {
                 EmitError("LGManager not found in scene.");
+                SceneLoadController.GetOrCreate().ReleaseBlackScreen(BlackScreenHoldReason);
                 return;
             }
 
             if (Web3.Wallet?.Account == null)
             {
                 EmitError("Wallet is not connected.");
+                SceneLoadController.GetOrCreate().ReleaseBlackScreen(BlackScreenHoldReason);
                 return;
             }
 
@@ -556,6 +564,7 @@ namespace SeekerDungeon.Solana
                 IsBusy = false;
                 ShowPlayerAfterInitialize();
                 EmitState(startupStatusMessage);
+                SceneLoadController.GetOrCreate().ReleaseBlackScreen(BlackScreenHoldReason);
             }
         }
 

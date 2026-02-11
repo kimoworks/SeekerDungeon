@@ -104,8 +104,8 @@ pub fn handler(ctx: Context<LootChest>) -> Result<()> {
     // Generate deterministic loot based on slot + player pubkey
     let loot_hash = generate_loot_hash(clock.slot, &player_key);
     let (item_type, item_amount) = calculate_loot(loot_hash);
-    let item_id = map_item_type_to_item_id(item_type);
-    let durability = item_durability(item_type);
+    let item_id = map_item_type_to_item_id(item_type, loot_hash);
+    let durability = item_durability(item_type, item_id);
 
     if inventory.owner == Pubkey::default() {
         inventory.owner = player_key;
@@ -165,18 +165,68 @@ fn calculate_loot(hash: u64) -> (u8, u8) {
     (item_type, item_amount)
 }
 
-fn map_item_type_to_item_id(item_type: u8) -> u16 {
+fn map_item_type_to_item_id(item_type: u8, hash: u64) -> u16 {
+    let picker = ((hash >> 16) & 0xFFFF) as usize;
     match item_type {
-        item_types::ORE => item_ids::ORE,
-        item_types::TOOL => item_ids::TOOL,
-        item_types::BUFF => item_ids::BUFF,
-        _ => item_ids::ORE,
+        item_types::TOOL => {
+            // Chest drops: common weapons only (no diamond sword from chests)
+            const TOOLS: [u16; 7] = [
+                item_ids::BRONZE_PICKAXE,
+                item_ids::IRON_PICKAXE,
+                item_ids::BRONZE_SWORD,
+                item_ids::IRON_SWORD,
+                item_ids::WOODEN_PIPE,
+                item_ids::IRON_SCIMITAR,
+                item_ids::WOODEN_TANKARD,
+            ];
+            TOOLS[picker % TOOLS.len()]
+        }
+        item_types::ORE => {
+            // Chest drops: common and mid-tier valuables
+            const VALUABLES: [u16; 14] = [
+                item_ids::SILVER_COIN,
+                item_ids::SILVER_COIN,  // weighted: more common
+                item_ids::GOLD_COIN,
+                item_ids::GOLD_COIN,    // weighted: more common
+                item_ids::GOLD_BAR,
+                item_ids::RUBY,
+                item_ids::SAPPHIRE,
+                item_ids::EMERALD,
+                item_ids::GOBLIN_TOOTH,
+                item_ids::DUSTY_TOME,
+                item_ids::SKELETON_KEY,
+                item_ids::RUSTED_COMPASS,
+                item_ids::DWARF_BEARD_RING,
+                item_ids::ENCHANTED_SCROLL,
+            ];
+            VALUABLES[picker % VALUABLES.len()]
+        }
+        item_types::BUFF => {
+            const BUFFS: [u16; 2] = [
+                item_ids::MINOR_BUFF,
+                item_ids::MAJOR_BUFF,
+            ];
+            BUFFS[picker % BUFFS.len()]
+        }
+        _ => item_ids::SILVER_COIN,
     }
 }
 
-fn item_durability(item_type: u8) -> u16 {
-    match item_type {
-        item_types::TOOL => 100,
-        _ => 0,
+fn item_durability(item_type: u8, item_id: u16) -> u16 {
+    if item_type == item_types::TOOL {
+        match item_id {
+            // Bronze tier
+            item_ids::BRONZE_PICKAXE | item_ids::BRONZE_SWORD => 80,
+            // Iron tier
+            item_ids::IRON_PICKAXE | item_ids::IRON_SWORD | item_ids::IRON_SCIMITAR => 120,
+            // Diamond tier
+            item_ids::DIAMOND_SWORD => 200,
+            // Fun / novelty weapons
+            item_ids::NOKIA_3310 => 9999,
+            item_ids::WOODEN_PIPE | item_ids::WOODEN_TANKARD => 60,
+            _ => 100,
+        }
+    } else {
+        0
     }
 }

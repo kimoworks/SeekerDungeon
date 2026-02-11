@@ -1,6 +1,6 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
     <Style src="project://database/Assets/Scripts/Solana/UI/LGMainMenuCharacterUI.uss?fileID=7433441132597879392&amp;guid=ddafedc00b875714d8f9ebdadf077410&amp;type=3#LGMainMenuCharacterUI"/>
-    <ui:VisualElement name="menu-root" class="menu-root">
+    <ui:VisualElement name="menu-root" class="menu-root" style="-unity-font-style: bold; -unity-font-definition: url(&quot;project://database/Assets/OpenSans-Bold.ttf?fileID=12800000&amp;guid=540b7a85944effe4fb9eb3de0c29d37a&amp;type=3#OpenSans-Bold&quot;);">
         <ui:VisualElement name="top-left-actions" class="top-left-actions">
             <ui:Button name="btn-disconnect-wallet" text="Disconnect" class="disconnect-button" style="font-size: 30px; margin-top: 13px; margin-bottom: 13px; padding-bottom: 35px; padding-top: 35px; padding-left: 28px; padding-right: 28px;"/>
         </ui:VisualElement>
@@ -37,18 +37,22 @@
                 <ui:Label name="existing-display-name-label" text="Name: --" class="existing-name-label"/>
             </ui:VisualElement>
             <ui:VisualElement name="create-character-container" class="cta-wrap">
-                <ui:Button name="btn-create-character" text="CREATE CHARACTER" class="action-button cta-button" style="width: 660px; -unity-font-style: bold;"/>
+                <ui:Button name="btn-create-character" text="Create Character" class="action-button cta-button" style="width: 660px; font-size: 40px; -unity-font-definition: url(&quot;project://database/Assets/OpenSans-Bold.ttf?fileID=12800000&amp;guid=540b7a85944effe4fb9eb3de0c29d37a&amp;type=3#OpenSans-Bold&quot;);"/>
             </ui:VisualElement>
             <ui:VisualElement name="existing-character-container" class="cta-wrap" style="display: none;">
-                <ui:Button name="btn-enter-dungeon" text="ENTER THE DUNGEON" class="action-button cta-button"/>
+                <ui:Button name="btn-enter-dungeon" text="Enter the Dungeon" class="action-button cta-button"/>
             </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="loading-overlay" class="loading-overlay" style="display: flex;">
+            <ui:VisualElement name="loading-spinner" class="loading-spinner"/>
+            <ui:Label name="loading-label" text="Loading..." class="loading-label"/>
         </ui:VisualElement>
         <ui:VisualElement name="session-setup-overlay" class="session-setup-overlay" style="display: none; background-color: rgba(34, 17, 34, 0.83); opacity: 1;">
             <ui:VisualElement name="session-setup-card" class="session-setup-card">
                 <ui:VisualElement name="session-setup-gem" class="wallet-session-gem wallet-session-gem-inactive session-setup-gem"/>
                 <ui:Label name="session-setup-title" text="SESSION INACTIVE" class="session-setup-title"/>
                 <ui:Label name="session-setup-message" text="Activate your gameplay session to enable smoother actions with fewer wallet prompts." class="session-setup-message"/>
-                <ui:Button name="btn-session-setup-activate" text="START SESSION" class="action-button modal-action-button modal-longbtn session-setup-button"/>
+                <ui:Button name="btn-session-setup-activate" text="Start Session" class="action-button modal-action-button modal-longbtn session-setup-button"/>
             </ui:VisualElement>
         </ui:VisualElement>
         <ui:VisualElement name="low-balance-modal-overlay" class="modal-overlay" style="display: none; -unity-material: url(&quot;project://database/Assets/Sprites/Materials/BgMat.mat?fileID=2100000&amp;guid=859fd8fa6f851ee4bbc894344994ba9a&amp;type=2#BgMat&quot;); background-color: rgba(8, 10, 16, 0.83);">
@@ -56,8 +60,8 @@
                 <ui:Label name="low-balance-modal-title" text="LOW BALANCE" class="modal-title"/>
                 <ui:Label name="low-balance-modal-message" text="" class="modal-message"/>
                 <ui:VisualElement name="low-balance-modal-button-row" class="modal-action-row">
-                    <ui:Button name="btn-low-balance-dismiss" text="DISMISS" class="action-button modal-action-button modal-longbtn"/>
-                    <ui:Button name="btn-low-balance-topup" text="AIRDROP SOL" class="action-button modal-action-button modal-longbtn" style="display: none;"/>
+                    <ui:Button name="btn-low-balance-dismiss" text="Dismiss" class="action-button modal-action-button modal-longbtn"/>
+                    <ui:Button name="btn-low-balance-topup" text="Airdrop Sol" class="action-button modal-action-button modal-longbtn" style="display: none;"/>
                 </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>

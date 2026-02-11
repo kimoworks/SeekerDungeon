@@ -1,0 +1,170 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abc7d9a54f369b04bae59e9a4a735982, type: 3}
+  m_Name: ItemRegistry
+  m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Dungeon.ItemRegistry
+  items:
+  - id: 100
+    displayName: Bronze Pickaxe
+    category: 0
+    rarity: 0
+    icon: {fileID: 8339514278218588892, guid: baaef710284d3e94ea25dea21dbe589a, type: 3}
+  - id: 101
+    displayName: Iron Pickaxe
+    category: 0
+    rarity: 1
+    icon: {fileID: 6917295004305499159, guid: 2fa7b2ccf6fd2c9439c6c1bc2ab5505f, type: 3}
+  - id: 102
+    displayName: Bronze Sword
+    category: 0
+    rarity: 0
+    icon: {fileID: -5978685031391667398, guid: 4b7959e98ed9aa3438490a9e8fa8caa7, type: 3}
+  - id: 103
+    displayName: Iron Sword
+    category: 0
+    rarity: 1
+    icon: {fileID: -2819661856973961762, guid: 75b3c0a925b3ae141bbfcb582fe9d3a6, type: 3}
+  - id: 104
+    displayName: Diamond Sword
+    category: 0
+    rarity: 2
+    icon: {fileID: 8815225644417209339, guid: 83b667eed6cb6ab41b2e017d06e74fb6, type: 3}
+  - id: 105
+    displayName: Nokia 3310
+    category: 0
+    rarity: 2
+    icon: {fileID: -2087212286460209791, guid: 88e583e1d0fcc824388cc18047066e4f, type: 3}
+  - id: 106
+    displayName: Wooden Pipe
+    category: 0
+    rarity: 0
+    icon: {fileID: 6271915152932634039, guid: 37227ed2dd3757143a6cdf7df0417c58, type: 3}
+  - id: 107
+    displayName: Iron Scimitar
+    category: 0
+    rarity: 1
+    icon: {fileID: -6195884010280833532, guid: 9c360272867d7e54c832a9191506f0d1, type: 3}
+  - id: 108
+    displayName: Wooden Tankard
+    category: 0
+    rarity: 0
+    icon: {fileID: 953076546080419673, guid: 83690b23298208f469de9fa6a544a9bc, type: 3}
+  - id: 200
+    displayName: Silver Coin
+    category: 1
+    rarity: 0
+    icon: {fileID: 5816487049153122715, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 201
+    displayName: Gold Coin
+    category: 1
+    rarity: 0
+    icon: {fileID: 3840306974799967491, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 202
+    displayName: Gold Bar
+    category: 1
+    rarity: 1
+    icon: {fileID: 8324237342488938172, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 203
+    displayName: Diamond
+    category: 1
+    rarity: 2
+    icon: {fileID: 2480275035561922715, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 204
+    displayName: Ruby
+    category: 1
+    rarity: 1
+    icon: {fileID: -1238660367217864625, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 205
+    displayName: Sapphire
+    category: 1
+    rarity: 1
+    icon: {fileID: -7996778631980443407, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 206
+    displayName: Emerald
+    category: 1
+    rarity: 1
+    icon: {fileID: -3921912553975710365, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 207
+    displayName: Ancient Crown
+    category: 1
+    rarity: 2
+    icon: {fileID: 9127335769535778483, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 208
+    displayName: Goblin Tooth
+    category: 1
+    rarity: 0
+    icon: {fileID: -8209721783928954937, guid: c88577f7bc7d34b4d8fefa79d7db0d7f, type: 3}
+  - id: 209
+    displayName: Dragon Scale
+    category: 1
+    rarity: 2
+    icon: {fileID: 3364675156246891143, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 210
+    displayName: Cursed Amulet
+    category: 1
+    rarity: 3
+    icon: {fileID: 6101860207394971628, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 211
+    displayName: Dusty Tome
+    category: 1
+    rarity: 0
+    icon: {fileID: -4608757316638656964, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 212
+    displayName: Enchanted Scroll
+    category: 1
+    rarity: 1
+    icon: {fileID: -1722530795266714503, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 213
+    displayName: Golden Chalice
+    category: 1
+    rarity: 2
+    icon: {fileID: -7931123541273070009, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 214
+    displayName: Skeleton Key
+    category: 1
+    rarity: 1
+    icon: {fileID: -4562212063941728495, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 215
+    displayName: Mystic Orb
+    category: 1
+    rarity: 3
+    icon: {fileID: -3599803840691840407, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 216
+    displayName: Rusted Compass
+    category: 1
+    rarity: 0
+    icon: {fileID: -247526583426198801, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 217
+    displayName: Dwarf Beard Ring
+    category: 1
+    rarity: 1
+    icon: {fileID: 5431752716789310542, guid: 1f9c10ed7c0d17748aa0b22bb941bc73, type: 3}
+  - id: 218
+    displayName: Phoenix Feather
+    category: 1
+    rarity: 2
+    icon: {fileID: 5655662756137059074, guid: d94cb901906c71e4da761e21e2cad1d5, type: 3}
+  - id: 219
+    displayName: Void Shard
+    category: 1
+    rarity: 3
+    icon: {fileID: -6172522568114850728, guid: d94cb901906c71e4da761e21e2cad1d5, type: 3}
+  - id: 300
+    displayName: Rubber Duck
+    category: 1
+    rarity: 3
+    icon: {fileID: -591156215409238601, guid: d94cb901906c71e4da761e21e2cad1d5, type: 3}
+  - id: 301
+    displayName: Bone Key
+    category: 1
+    rarity: 1
+    icon: {fileID: 8780387736085619966, guid: 872c8095d6d4abd4399603b5742a5f69, type: 3}

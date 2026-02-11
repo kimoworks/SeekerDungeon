@@ -61,6 +61,7 @@ namespace SeekerDungeon.Solana
         public PlayerAccount CurrentPlayerState { get; private set; }
         public PlayerProfile CurrentProfileState { get; private set; }
         public RoomAccount CurrentRoomState { get; private set; }
+        public InventoryAccount CurrentInventoryState { get; private set; }
 
         // Events
         public event Action<GlobalAccount> OnGlobalStateUpdated;
@@ -68,6 +69,8 @@ namespace SeekerDungeon.Solana
         public event Action<PlayerProfile> OnProfileStateUpdated;
         public event Action<RoomAccount> OnRoomStateUpdated;
         public event Action<IReadOnlyList<RoomOccupantView>> OnRoomOccupantsUpdated;
+        public event Action<InventoryAccount> OnInventoryUpdated;
+        public event Action<LootResult> OnChestLootResult;
         public event Action<string> OnTransactionSent;
         public event Action<string> OnError;
 
@@ -545,11 +548,66 @@ namespace SeekerDungeon.Solana
         }
 
         /// <summary>
+        /// Fetch inventory for the current wallet
+        /// </summary>
+        public async UniTask<InventoryAccount> FetchInventory()
+        {
+            if (Web3.Wallet == null)
+            {
+                LogError("Wallet not connected");
+                return null;
+            }
+
+            Log("Fetching inventory...");
+
+            try
+            {
+                var inventoryPda = DeriveInventoryPda(Web3.Wallet.Account.PublicKey);
+                if (inventoryPda == null)
+                {
+                    LogError("Failed to derive inventory PDA");
+                    return null;
+                }
+
+                if (!await AccountHasData(inventoryPda))
+                {
+                    Log("Inventory account not found (not initialized yet)");
+                    CurrentInventoryState = null;
+                    OnInventoryUpdated?.Invoke(null);
+                    return null;
+                }
+
+                var result = await _client.GetInventoryAccountAsync(inventoryPda.Key, Commitment.Confirmed);
+
+                if (!result.WasSuccessful || result.ParsedResult == null)
+                {
+                    Log("Inventory account not found");
+                    CurrentInventoryState = null;
+                    OnInventoryUpdated?.Invoke(null);
+                    return null;
+                }
+
+                CurrentInventoryState = result.ParsedResult;
+                var itemCount = CurrentInventoryState.Items?.Length ?? 0;
+                Log($"Inventory fetched: {itemCount} item stacks");
+                OnInventoryUpdated?.Invoke(CurrentInventoryState);
+
+                return CurrentInventoryState;
+            }
+            catch (Exception e)
+            {
+                LogError($"Failed to fetch inventory: {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Get current room as a typed domain view
         /// </summary>
         public RoomView GetCurrentRoomView()
         {
-            return CurrentRoomState.ToRoomView();
+            var wallet = Web3.Wallet?.Account?.PublicKey;
+            return CurrentRoomState.ToRoomView(wallet);
         }
 
         /// <summary>
@@ -574,6 +632,7 @@ namespace SeekerDungeon.Solana
             await FetchPlayerState();
             await FetchPlayerProfile();
             await FetchCurrentRoom();
+            await FetchInventory();
             Log("State refresh complete");
         }
 
@@ -1262,6 +1321,45 @@ namespace SeekerDungeon.Solana
                     Web3.Wallet.Account.PublicKey,
                     CurrentGlobalState.SkrMint
                 );
+
+                // ── Diagnostic: token account + delegation state ──
+                var walletSessionManager = GetWalletSessionManager();
+                var sessionActive = walletSessionManager != null && walletSessionManager.CanUseLocalSessionSigning;
+                var sessionSignerKey = walletSessionManager?.ActiveSessionSignerPublicKey?.Key ?? "<none>";
+                Log($"JoinJob diag: playerWallet={Web3.Wallet.Account.PublicKey.Key.Substring(0, 8)}.. playerATA={playerTokenAccount.Key.Substring(0, 8)}.. sessionActive={sessionActive} sessionSigner={sessionSignerKey.Substring(0, Math.Min(8, sessionSignerKey.Length))}.. skrMint={CurrentGlobalState.SkrMint.Key.Substring(0, 8)}..");
+
+                try
+                {
+                    var rpc = Web3.Wallet.ActiveRpcClient;
+                    if (rpc != null)
+                    {
+                        var tokenBalResult = await rpc.GetTokenAccountBalanceAsync(playerTokenAccount);
+                        if (tokenBalResult.WasSuccessful && tokenBalResult.Result?.Value != null)
+                        {
+                            var rawAmount = tokenBalResult.Result.Value.Amount ?? "0";
+                            var delegateStr = tokenBalResult.Result.Value.UiAmountString ?? "?";
+                            Log($"JoinJob diag: playerATA balance={rawAmount} raw, uiAmount={delegateStr}");
+                        }
+                        else
+                        {
+                            Log($"JoinJob diag: failed to fetch playerATA balance: {tokenBalResult.Reason}");
+                        }
+
+                        // Check delegation on the token account
+                        var accountInfoResult = await rpc.GetAccountInfoAsync(playerTokenAccount);
+                        if (accountInfoResult.WasSuccessful && accountInfoResult.Result?.Value?.Data != null)
+                        {
+                            var data = accountInfoResult.Result.Value.Data;
+                            Log($"JoinJob diag: playerATA account owner={accountInfoResult.Result.Value.Owner} dataLen={data.Count}");
+                        }
+                    }
+                }
+                catch (System.Exception diagEx)
+                {
+                    Log($"JoinJob diag: error fetching token info: {diagEx.Message}");
+                }
+                // ── End diagnostic ──
+
                 if (!await AccountHasData(playerTokenAccount))
                 {
                     LogError("JoinJob blocked: your SKR token account (ATA) is not initialized for this wallet.");
@@ -1335,6 +1433,11 @@ namespace SeekerDungeon.Solana
                         Log($"Joined job! TX: {signature}");
                         await RefreshAllState();
                     });
+
+                if (string.IsNullOrWhiteSpace(signature))
+                {
+                    LogError($"JoinJob diag: TX returned null/empty. lastProgramErrorCode={_lastProgramErrorCode?.ToString() ?? "<null>"} (0x{_lastProgramErrorCode:X})");
+                }
 
                 return signature;
             }
@@ -1627,6 +1730,9 @@ namespace SeekerDungeon.Solana
 
             Log("Looting chest...");
 
+            // Snapshot inventory before loot so we can diff afterwards
+            var inventoryBefore = CurrentInventoryState;
+
             try
             {
                 var signature = await ExecuteGameplayActionAsync(
@@ -1659,6 +1765,18 @@ namespace SeekerDungeon.Solana
                     {
                         Log($"Chest looted! TX: {signature}");
                         await RefreshAllState();
+
+                        // Compute loot diff and fire event
+                        var lootResult = LGDomainMapper.ComputeLootDiff(inventoryBefore, CurrentInventoryState);
+                        if (lootResult.Items.Count > 0)
+                        {
+                            Log($"Loot result: {lootResult.Items.Count} item(s) gained");
+                            OnChestLootResult?.Invoke(lootResult);
+                        }
+                        else
+                        {
+                            Log("Loot result: no new items detected (diff empty)");
+                        }
                     });
 
                 return signature;
@@ -2002,6 +2120,9 @@ namespace SeekerDungeon.Solana
 
             Log("Looting boss...");
 
+            // Snapshot inventory before loot so we can diff afterwards
+            var inventoryBefore = CurrentInventoryState;
+
             try
             {
                 var signature = await ExecuteGameplayActionAsync(
@@ -2044,6 +2165,14 @@ namespace SeekerDungeon.Solana
                     {
                         Log($"Boss looted! TX: {signature}");
                         await RefreshAllState();
+
+                        // Compute loot diff and fire event
+                        var lootResult = LGDomainMapper.ComputeLootDiff(inventoryBefore, CurrentInventoryState);
+                        if (lootResult.Items.Count > 0)
+                        {
+                            Log($"Boss loot result: {lootResult.Items.Count} item(s) gained");
+                            OnChestLootResult?.Invoke(lootResult);
+                        }
                     });
 
                 return signature;

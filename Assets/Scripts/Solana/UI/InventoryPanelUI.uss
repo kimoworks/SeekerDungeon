@@ -1,0 +1,155 @@
+/* ─── Overlay (full screen backdrop) ─── */
+
+.inventory-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+}
+
+/* ─── Panel ─── */
+
+.inventory-panel {
+    width: 70%;
+    max-width: 900px;
+    height: 70%;
+    max-height: 1200px;
+    background-color: rgb(22, 24, 32);
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    border-top-width: 3px;
+    border-right-width: 3px;
+    border-bottom-width: 3px;
+    border-left-width: 3px;
+    border-top-color: rgba(164, 173, 194, 0.8);
+    border-left-color: rgba(150, 158, 182, 0.8);
+    border-right-color: rgba(48, 53, 69, 0.9);
+    border-bottom-color: rgba(40, 46, 62, 0.9);
+    padding: 16px;
+    flex-direction: column;
+}
+
+/* ─── Header ─── */
+
+.inventory-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom-width: 2px;
+    border-bottom-color: rgba(100, 110, 130, 0.4);
+}
+
+.inventory-title {
+    font-size: 38px;
+    -unity-font-style: bold;
+    color: rgb(243, 248, 255);
+}
+
+.inventory-close-button {
+    width: 60px;
+    height: 60px;
+    font-size: 28px;
+    -unity-font-style: bold;
+    -unity-font: url("project://database/Assets/OpenSans-Bold.ttf?fileID=12800000&guid=540b7a85944effe4fb9eb3de0c29d37a&type=3#OpenSans-Bold");
+    -unity-font-definition: none;
+    color: rgb(245, 250, 255);
+    background-color: rgb(141, 47, 62);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    border-top-width: 2px;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
+    border-left-width: 2px;
+    border-top-color: rgb(225, 146, 160);
+    border-left-color: rgb(206, 118, 132);
+    border-right-color: rgb(84, 28, 38);
+    border-bottom-color: rgb(67, 22, 31);
+}
+
+.inventory-close-button:active {
+    margin-top: 3px;
+    margin-bottom: -3px;
+}
+
+/* ─── Scroll area ─── */
+
+.inventory-scroll {
+    flex-grow: 1;
+}
+
+/* ─── Grid ─── */
+
+.inventory-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 4px;
+}
+
+/* ─── Slot ─── */
+
+.inventory-panel-slot {
+    width: 140px;
+    height: 160px;
+    margin: 6px;
+    background-color: rgba(30, 30, 40, 0.85);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    border-top-width: 2px;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
+    border-left-width: 2px;
+    border-color: rgba(100, 110, 130, 0.5);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 6px;
+}
+
+.inventory-panel-slot-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 4px;
+}
+
+.inventory-panel-slot-name {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(220, 230, 245);
+    -unity-text-align: middle-center;
+    margin-bottom: 2px;
+}
+
+.inventory-panel-slot-amount {
+    font-size: 18px;
+    color: rgb(180, 190, 210);
+    -unity-text-align: middle-center;
+}
+
+.inventory-panel-slot-durability {
+    font-size: 16px;
+    color: rgb(140, 200, 140);
+    -unity-text-align: middle-center;
+}
+
+/* ─── Empty state ─── */
+
+.inventory-empty-label {
+    font-size: 28px;
+    color: rgb(140, 150, 170);
+    -unity-text-align: middle-center;
+    margin-top: 60px;
+}

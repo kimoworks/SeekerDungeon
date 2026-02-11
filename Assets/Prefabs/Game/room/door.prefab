@@ -108,9 +108,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: -1657788929
+  m_SortingLayer: -1
+  m_SortingOrder: 3
   m_MaskInteraction: 0
   m_Sprite: {fileID: 3813719652652902520, guid: 79bc55d437f88e2498d50c54fabeb312, type: 3}
   m_Color: {r: 0.5647059, g: 0.5647059, b: 0.5647059, a: 1}
@@ -827,6 +827,10 @@ MonoBehaviour:
   - anchor: {fileID: 4422743665247437646}
     facingDirection: 1
   occupantVisualPrefab: {fileID: 4752332143254669612, guid: 801d1000ca6b4874a85a4ca31780a2ec, type: 3}
+  visualSpawnRoot: {fileID: 0}
+  spawnPopDuration: 0.1
+  spawnPopStartScaleMultiplier: 0.82
+  spawnStaggerSeconds: 0.05
 --- !u!114 &2628606042828309492
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -887,6 +891,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Dungeon.DoorInteractable
   direction: 0
+  interactPoint: {fileID: 0}
 --- !u!1 &8908296258164912018
 GameObject:
   m_ObjectHideFlags: 0

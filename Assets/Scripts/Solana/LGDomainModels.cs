@@ -34,9 +34,48 @@ namespace SeekerDungeon.Solana
     public enum ItemId : ushort
     {
         None = 0,
-        Ore = 1,
-        Tool = 2,
-        Buff = 3
+
+        // Legacy (kept for backward compat with existing inventories)
+        LegacyOre = 1,
+        LegacyTool = 2,
+        LegacyBuff = 3,
+
+        // Wearable Weapons (100-199)
+        BronzePickaxe = 100,
+        IronPickaxe = 101,
+        BronzeSword = 102,
+        IronSword = 103,
+        DiamondSword = 104,
+        Nokia3310 = 105,
+        WoodenPipe = 106,
+        IronScimitar = 107,
+        WoodenTankard = 108,
+
+        // Lootable Valuables (200-299)
+        SilverCoin = 200,
+        GoldCoin = 201,
+        GoldBar = 202,
+        Diamond = 203,
+        Ruby = 204,
+        Sapphire = 205,
+        Emerald = 206,
+        AncientCrown = 207,
+        GoblinTooth = 208,
+        DragonScale = 209,
+        CursedAmulet = 210,
+        DustyTome = 211,
+        EnchantedScroll = 212,
+        GoldenChalice = 213,
+        SkeletonKey = 214,
+        MysticOrb = 215,
+        RustedCompass = 216,
+        DwarfBeardRing = 217,
+        PhoenixFeather = 218,
+        VoidShard = 219,
+
+        // Consumable Buffs (300-399)
+        MinorBuff = 300,
+        MajorBuff = 301,
     }
 
     public enum PlayerSkinId : ushort
@@ -100,6 +139,7 @@ namespace SeekerDungeon.Solana
         public sbyte Y { get; init; }
         public RoomCenterType CenterType { get; init; }
         public int LootedCount { get; init; }
+        public bool HasLocalPlayerLooted { get; init; }
         public PublicKey CreatedBy { get; init; }
         public IReadOnlyDictionary<RoomDirection, DoorJobView> Doors { get; init; }
         private MonsterView _monster;
@@ -118,6 +158,18 @@ namespace SeekerDungeon.Solana
         {
             _monster = monster;
         }
+    }
+
+    public sealed class InventoryItemView
+    {
+        public ItemId ItemId { get; init; }
+        public uint Amount { get; init; }
+        public ushort Durability { get; init; }
+    }
+
+    public sealed class LootResult
+    {
+        public IReadOnlyList<InventoryItemView> Items { get; init; }
     }
 
     public sealed class PlayerStateView
@@ -167,7 +219,7 @@ namespace SeekerDungeon.Solana
 
     public static class LGDomainMapper
     {
-        public static RoomView ToRoomView(this RoomAccount room)
+        public static RoomView ToRoomView(this RoomAccount room, PublicKey localPlayerWallet = null)
         {
             if (room == null)
             {
@@ -180,12 +232,27 @@ namespace SeekerDungeon.Solana
             doors[RoomDirection.East] = BuildDoor(room, RoomDirection.East);
             doors[RoomDirection.West] = BuildDoor(room, RoomDirection.West);
 
+            var hasLocalPlayerLooted = false;
+            if (localPlayerWallet != null && room.LootedBy != null)
+            {
+                var walletKey = localPlayerWallet.Key;
+                foreach (var looter in room.LootedBy)
+                {
+                    if (looter != null && looter.Key == walletKey)
+                    {
+                        hasLocalPlayerLooted = true;
+                        break;
+                    }
+                }
+            }
+
             var roomView = new RoomView
             {
                 X = room.X,
                 Y = room.Y,
                 CenterType = ToCenterType(room.CenterType),
                 LootedCount = room.LootedBy?.Length ?? 0,
+                HasLocalPlayerLooted = hasLocalPlayerLooted,
                 CreatedBy = room.CreatedBy,
                 Doors = doors
             };
@@ -296,14 +363,9 @@ namespace SeekerDungeon.Solana
 
         public static ItemId ToItemId(ushort itemId)
         {
-            return itemId switch
-            {
-                1 => ItemId.Ore,
-                2 => ItemId.Tool,
-                3 => ItemId.Buff,
-                0 => ItemId.None,
-                _ => ItemId.None
-            };
+            if (System.Enum.IsDefined(typeof(ItemId), itemId))
+                return (ItemId)itemId;
+            return ItemId.None;
         }
 
         public static OccupantActivity ToOccupantActivity(byte activity)
@@ -315,6 +377,67 @@ namespace SeekerDungeon.Solana
                 2 => OccupantActivity.BossFight,
                 _ => OccupantActivity.Unknown
             };
+        }
+
+        public static IReadOnlyList<InventoryItemView> ToInventoryItemViews(this InventoryAccount inventory)
+        {
+            if (inventory?.Items == null || inventory.Items.Length == 0)
+            {
+                return Array.Empty<InventoryItemView>();
+            }
+
+            return inventory.Items
+                .Where(item => item != null && item.Amount > 0)
+                .Select(item => new InventoryItemView
+                {
+                    ItemId = ToItemId(item.ItemId),
+                    Amount = item.Amount,
+                    Durability = item.Durability
+                })
+                .ToArray();
+        }
+
+        public static LootResult ComputeLootDiff(
+            InventoryAccount before,
+            InventoryAccount after)
+        {
+            var beforeItems = new Dictionary<ushort, uint>();
+            if (before?.Items != null)
+            {
+                foreach (var item in before.Items)
+                {
+                    if (item != null && item.Amount > 0)
+                    {
+                        beforeItems[item.ItemId] = item.Amount;
+                    }
+                }
+            }
+
+            var gained = new List<InventoryItemView>();
+            if (after?.Items != null)
+            {
+                foreach (var item in after.Items)
+                {
+                    if (item == null || item.Amount == 0)
+                    {
+                        continue;
+                    }
+
+                    beforeItems.TryGetValue(item.ItemId, out var previousAmount);
+                    var diff = item.Amount - previousAmount;
+                    if (diff > 0)
+                    {
+                        gained.Add(new InventoryItemView
+                        {
+                            ItemId = ToItemId(item.ItemId),
+                            Amount = diff,
+                            Durability = item.Durability
+                        });
+                    }
+                }
+            }
+
+            return new LootResult { Items = gained };
         }
 
         private static DoorJobView BuildDoor(RoomAccount room, RoomDirection direction)

@@ -189,6 +189,9 @@ slither-output/
 # Temp diagnostic logs (adb captures etc.)
 .tmp_*
 
+# Local dev scripts (may contain user-specific paths)
+read_log.ps1
+
 # Test results
 TestResults/
 test-results/

@@ -16,6 +16,13 @@ namespace SeekerDungeon.Solana
         public Sprite Sprite => sprite;
     }
 
+    [Serializable]
+    public sealed class WieldableItemEntry
+    {
+        public ItemId itemId;
+        public GameObject visual;
+    }
+
     public sealed class LGPlayerController : MonoBehaviour
     {
         [SerializeField] private SpriteRenderer skinSpriteRenderer;
@@ -28,6 +35,8 @@ namespace SeekerDungeon.Solana
         [SerializeField] private float skinPopScaleMultiplier = 1.12f;
         [SerializeField] private float skinPopOutDuration = 0.08f;
         [SerializeField] private float skinPopReturnDuration = 0.12f;
+        [Header("Wieldable Items")]
+        [SerializeField] private List<WieldableItemEntry> wieldableItems = new();
 
         public PlayerSkinId CurrentSkin { get; private set; } = PlayerSkinId.Goblin;
         public Transform CharacterNameAnchorTransform => characterNameAnchor != null ? characterNameAnchor : transform;
@@ -103,6 +112,7 @@ namespace SeekerDungeon.Solana
 
         public bool ApplySkin(PlayerSkinId skin)
         {
+            if (this == null) return false;
             CurrentSkin = skin;
 
             if (skinSpriteRenderer == null)
@@ -122,6 +132,7 @@ namespace SeekerDungeon.Solana
 
         public void SetPlayerNamePrefab(GameObject namePrefab)
         {
+            if (this == null) return;
             if (namePrefab != null)
             {
                 playerNamePrefab = namePrefab;
@@ -132,6 +143,7 @@ namespace SeekerDungeon.Solana
 
         public void SetDisplayName(string displayName)
         {
+            if (this == null) return;
             EnsurePlayerNameTag();
             if (_playerNameText == null)
             {
@@ -145,6 +157,7 @@ namespace SeekerDungeon.Solana
 
         public void SetDisplayNameVisible(bool isVisible)
         {
+            if (this == null) return;
             EnsurePlayerNameTag();
             if (_playerNameInstance == null)
             {
@@ -152,6 +165,59 @@ namespace SeekerDungeon.Solana
             }
 
             _playerNameInstance.SetActive(isVisible);
+        }
+
+        /// <summary>
+        /// Show the wielded item visual that best matches the player's equipped item.
+        /// Disables all other wieldable item visuals. If no match is found for the
+        /// given itemId, falls back to the first pickaxe available, then first weapon.
+        /// </summary>
+        public void ShowWieldedItem(ItemId itemId)
+        {
+            GameObject bestMatch = null;
+            GameObject fallbackPickaxe = null;
+            GameObject fallbackAny = null;
+
+            foreach (var entry in wieldableItems)
+            {
+                if (entry?.visual == null) continue;
+
+                entry.visual.SetActive(false);
+
+                if (entry.itemId == itemId)
+                {
+                    bestMatch = entry.visual;
+                }
+                else if (fallbackPickaxe == null &&
+                         (entry.itemId == ItemId.BronzePickaxe || entry.itemId == ItemId.IronPickaxe))
+                {
+                    fallbackPickaxe = entry.visual;
+                }
+                else if (fallbackAny == null)
+                {
+                    fallbackAny = entry.visual;
+                }
+            }
+
+            var toShow = bestMatch ?? fallbackPickaxe ?? fallbackAny;
+            if (toShow != null)
+            {
+                toShow.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// Hide all wielded item visuals.
+        /// </summary>
+        public void HideAllWieldedItems()
+        {
+            foreach (var entry in wieldableItems)
+            {
+                if (entry?.visual != null)
+                {
+                    entry.visual.SetActive(false);
+                }
+            }
         }
 
         private void PlaySkinSwitchAnimation()

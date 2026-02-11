@@ -504,6 +504,7 @@ GameObject:
   - component: {fileID: 956339297}
   - component: {fileID: 956339296}
   - component: {fileID: 956339298}
+  - component: {fileID: 956339299}
   m_Layer: 5
   m_Name: UIDocument
   m_TagString: Untagged
@@ -562,7 +563,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.Solana.LGMainMenuCharacterUI
   characterManager: {fileID: 1459274709}
-  playerNamePrefab: {fileID: 2216771843196064832, guid: 1614aba7c126b8b43ab8f929fa17910a, type: 3}
+--- !u!114 &956339299
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 956339295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bfce3a516c525e4ea79fa5d51a6c089, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeekerDungeon.UI.SafeAreaApplier
 --- !u!1 &1156078724
 GameObject:
   m_ObjectHideFlags: 0

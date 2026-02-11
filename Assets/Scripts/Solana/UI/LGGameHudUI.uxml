@@ -15,5 +15,9 @@
                 <ui:Button name="hud-btn-disconnect" text="Disconnect" class="hud-button hud-button-danger"/>
             </ui:VisualElement>
         </ui:VisualElement>
+        <ui:VisualElement name="hud-inventory-bar" class="hud-inventory-bar">
+            <ui:Button name="hud-btn-bag" class="hud-bag-button" text="Bag"/>
+            <ui:VisualElement name="hud-inventory-slots" class="hud-inventory-slots"/>
+        </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

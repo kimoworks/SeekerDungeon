@@ -1,0 +1,14 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" xsi="http://www.w3.org/2001/XMLSchema-instance" engine="UnityEngine.UIElements" editor="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="InventoryPanelUI.uss"/>
+    <ui:VisualElement name="inventory-overlay" class="inventory-overlay" picking-mode="Position">
+        <ui:VisualElement name="inventory-panel" class="inventory-panel">
+            <ui:VisualElement name="inventory-header" class="inventory-header">
+                <ui:Label name="inventory-title" text="Inventory" class="inventory-title"/>
+                <ui:Button name="inventory-btn-close" text="X" class="inventory-close-button"/>
+            </ui:VisualElement>
+            <ui:ScrollView name="inventory-scroll" class="inventory-scroll" mode="Vertical">
+                <ui:VisualElement name="inventory-grid" class="inventory-grid"/>
+            </ui:ScrollView>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -18,8 +18,11 @@ namespace SeekerDungeon.Dungeon
         [SerializeField] private LocalPlayerJobMover localPlayerJobMover;
         [SerializeField] private RoomController roomController;
         [SerializeField] private DungeonManager dungeonManager;
+        [SerializeField] private LootSequenceController lootSequenceController;
+        [SerializeField] private SeekerDungeon.Solana.LGGameHudUI gameHudUI;
 
         private LGManager _lgManager;
+        private LGPlayerController _localPlayerController;
         private float _nextInteractTime;
         private bool _isProcessingInteract;
         private bool _pointerPressed;
@@ -54,6 +57,55 @@ namespace SeekerDungeon.Dungeon
             {
                 dungeonManager = UnityEngine.Object.FindFirstObjectByType<DungeonManager>();
             }
+        }
+
+        private void OnEnable()
+        {
+            if (_lgManager != null)
+            {
+                _lgManager.OnPlayerStateUpdated += HandlePlayerStateUpdated;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_lgManager != null)
+            {
+                _lgManager.OnPlayerStateUpdated -= HandlePlayerStateUpdated;
+            }
+        }
+
+        private void HandlePlayerStateUpdated(Chaindepth.Accounts.PlayerAccount player)
+        {
+            ResolveLocalPlayerController();
+            if (_localPlayerController == null || player == null) return;
+
+            // If the player has no active jobs in the current room, hide wielded items
+            var hasAnyJobHere = false;
+            if (player.ActiveJobs != null)
+            {
+                foreach (var job in player.ActiveJobs)
+                {
+                    if (job != null &&
+                        job.RoomX == player.CurrentRoomX &&
+                        job.RoomY == player.CurrentRoomY)
+                    {
+                        hasAnyJobHere = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasAnyJobHere)
+            {
+                _localPlayerController.HideAllWieldedItems();
+            }
+        }
+
+        private void ResolveLocalPlayerController()
+        {
+            if (_localPlayerController != null) return;
+            _localPlayerController = UnityEngine.Object.FindFirstObjectByType<LGPlayerController>();
         }
 
         private void Update()
@@ -142,12 +194,29 @@ namespace SeekerDungeon.Dungeon
                                            (currentRoomX != previousRoomX || currentRoomY != previousRoomY);
                     var openDoorMoveAttempted = wasDoorOpenBeforeInteraction && !string.IsNullOrWhiteSpace(signature);
                     var shouldTransitionRoom = (playerMovedRooms || openDoorMoveAttempted) && dungeonManager != null;
+                    ResolveLocalPlayerController();
+
                     if (shouldTransitionRoom)
                     {
+                        // Player moved rooms -- hide any wielded item
+                        if (_localPlayerController != null)
+                        {
+                            _localPlayerController.HideAllWieldedItems();
+                        }
+
                         await dungeonManager.TransitionToCurrentPlayerRoomAsync();
                     }
                     else if (!string.IsNullOrWhiteSpace(signature) || hasHelperStakeAfterInteraction)
                     {
+                        // Player started or is working a rubble-clearing job -- show wielded item
+                        if (_localPlayerController != null)
+                        {
+                            var equippedId = _lgManager.CurrentPlayerState != null
+                                ? LGDomainMapper.ToItemId(_lgManager.CurrentPlayerState.EquippedItemId)
+                                : ItemId.BronzePickaxe;
+                            _localPlayerController.ShowWieldedItem(equippedId);
+                        }
+
                         if (localPlayerJobMover != null)
                         {
                             if (roomController != null &&
@@ -161,6 +230,15 @@ namespace SeekerDungeon.Dungeon
                             }
                         }
                     }
+                    else
+                    {
+                        // Door is now open (job completed) -- hide wielded item
+                        var isDoorOpenNow = IsDoorOpenInCurrentState(door.Direction);
+                        if (isDoorOpenNow && _localPlayerController != null)
+                        {
+                            _localPlayerController.HideAllWieldedItems();
+                        }
+                    }
 
                     _nextInteractTime = Time.unscaledTime + interactCooldownSeconds;
                     return;
@@ -169,10 +247,55 @@ namespace SeekerDungeon.Dungeon
                 var center = hit.GetComponentInParent<CenterInteractable>();
                 if (center != null)
                 {
-                    var signature = await _lgManager.InteractWithCenter();
-                    if (!string.IsNullOrWhiteSpace(signature) && localPlayerJobMover != null)
+                    // Check if center is a chest/boss before the TX so we know if loot animation applies
+                    var roomState = _lgManager.CurrentRoomState;
+                    var isLootableCenter = roomState != null &&
+                        (roomState.CenterType == LGConfig.CENTER_CHEST ||
+                         (roomState.CenterType == LGConfig.CENTER_BOSS && roomState.BossDefeated));
+
+                    // Subscribe to loot result temporarily if this is a lootable center
+                    SeekerDungeon.Solana.LootResult capturedLootResult = null;
+                    void OnLootResult(SeekerDungeon.Solana.LootResult result) { capturedLootResult = result; }
+                    if (isLootableCenter)
                     {
-                        localPlayerJobMover.MoveTo(center.InteractWorldPosition);
+                        _lgManager.OnChestLootResult += OnLootResult;
+                    }
+
+                    try
+                    {
+                        var signature = await _lgManager.InteractWithCenter();
+                        if (!string.IsNullOrWhiteSpace(signature) && localPlayerJobMover != null)
+                        {
+                            localPlayerJobMover.MoveTo(center.InteractWorldPosition);
+                        }
+
+                        // Play chest open animation on the visual controller
+                        if (!string.IsNullOrWhiteSpace(signature) && isLootableCenter && roomController != null)
+                        {
+                            roomController.PlayChestOpenAnimation();
+                        }
+
+                        // Play loot reveal sequence
+                        if (capturedLootResult != null && lootSequenceController != null)
+                        {
+                            System.Func<SeekerDungeon.Solana.ItemId, Vector3?> slotPosFunc = null;
+                            if (gameHudUI != null)
+                            {
+                                slotPosFunc = (itemId) => gameHudUI.GetSlotScreenPosition(itemId);
+                            }
+
+                            lootSequenceController.PlayLootSequence(
+                                capturedLootResult,
+                                center.InteractWorldPosition,
+                                slotPosFunc);
+                        }
+                    }
+                    finally
+                    {
+                        if (isLootableCenter)
+                        {
+                            _lgManager.OnChestLootResult -= OnLootResult;
+                        }
                     }
 
                     _nextInteractTime = Time.unscaledTime + interactCooldownSeconds;

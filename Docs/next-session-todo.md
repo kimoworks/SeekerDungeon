@@ -32,9 +32,9 @@ Goal:
 
 Implement:
 - [ ] Confirm onchain chest loot writes to `InventoryAccount` correctly for all chest outcomes.
-- [ ] Add/finish Unity inventory view binding to onchain inventory items.
-- [ ] Refresh UI immediately after successful loot transaction.
-- [ ] Show clear player feedback (loot result + inventory update).
+- [x] Add/finish Unity inventory view binding to onchain inventory items.
+- [x] Refresh UI immediately after successful loot transaction.
+- [x] Show clear player feedback (loot result + inventory update).
 
 ## 4) Unity Dev Task: Mining Animation
 

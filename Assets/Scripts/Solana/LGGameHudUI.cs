@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
+using Chaindepth.Accounts;
 using Cysharp.Threading.Tasks;
-using SeekerDungeon;
+using SeekerDungeon.Dungeon;
 using Solana.Unity.Programs;
 using Solana.Unity.Rpc.Types;
 using Solana.Unity.SDK;
@@ -17,6 +19,7 @@ namespace SeekerDungeon.Solana
         [Header("References")]
         [SerializeField] private LGManager manager;
         [SerializeField] private LGWalletSessionManager walletSessionManager;
+        [SerializeField] private ItemRegistry itemRegistry;
 
         [Header("Scene Flow")]
         [SerializeField] private string backSceneName = "MenuScene";
@@ -26,6 +29,11 @@ namespace SeekerDungeon.Solana
         [SerializeField] private float hudRefreshSeconds = 3f;
         [SerializeField] private bool logDebugMessages = false;
 
+        /// <summary>
+        /// Fired when the Bag button is clicked. Listeners should open the full inventory panel.
+        /// </summary>
+        public event Action OnBagClicked;
+
         private UIDocument _document;
         private Label _solBalanceLabel;
         private Label _skrBalanceLabel;
@@ -33,6 +41,10 @@ namespace SeekerDungeon.Solana
         private Label _statusLabel;
         private Button _backButton;
         private Button _disconnectButton;
+        private Button _bagButton;
+        private VisualElement _inventorySlotsContainer;
+
+        private readonly Dictionary<ItemId, VisualElement> _slotsByItemId = new();
 
         private bool _isLoadingScene;
 
@@ -76,6 +88,8 @@ namespace SeekerDungeon.Solana
             _statusLabel = root.Q<Label>("hud-status");
             _backButton = root.Q<Button>("hud-btn-back");
             _disconnectButton = root.Q<Button>("hud-btn-disconnect");
+            _bagButton = root.Q<Button>("hud-btn-bag");
+            _inventorySlotsContainer = root.Q<VisualElement>("hud-inventory-slots");
 
             if (_backButton != null)
             {
@@ -87,10 +101,16 @@ namespace SeekerDungeon.Solana
                 _disconnectButton.clicked += HandleDisconnectClicked;
             }
 
+            if (_bagButton != null)
+            {
+                _bagButton.clicked += HandleBagClicked;
+            }
+
             if (manager != null)
             {
                 manager.OnPlayerStateUpdated += HandlePlayerStateUpdated;
                 manager.OnRoomStateUpdated += HandleRoomStateUpdated;
+                manager.OnInventoryUpdated += HandleInventoryUpdated;
             }
 
             if (walletSessionManager != null)
@@ -101,6 +121,7 @@ namespace SeekerDungeon.Solana
 
             RefreshHudAsync().Forget();
             RefreshLoopAsync(this.GetCancellationTokenOnDestroy()).Forget();
+            RefreshInventorySlots(manager?.CurrentInventoryState);
         }
 
         private void OnDisable()
@@ -115,10 +136,16 @@ namespace SeekerDungeon.Solana
                 _disconnectButton.clicked -= HandleDisconnectClicked;
             }
 
+            if (_bagButton != null)
+            {
+                _bagButton.clicked -= HandleBagClicked;
+            }
+
             if (manager != null)
             {
                 manager.OnPlayerStateUpdated -= HandlePlayerStateUpdated;
                 manager.OnRoomStateUpdated -= HandleRoomStateUpdated;
+                manager.OnInventoryUpdated -= HandleInventoryUpdated;
             }
 
             if (walletSessionManager != null)
@@ -214,6 +241,9 @@ namespace SeekerDungeon.Solana
                 return;
             }
 
+            if (logDebugMessages)
+                Debug.Log($"[GameHud] Refreshing balances for wallet={account.PublicKey.Key.Substring(0, 8)}..");
+
             var solResult = await wallet.ActiveRpcClient.GetBalanceAsync(account.PublicKey, Commitment.Confirmed);
             if (solResult.WasSuccessful && solResult.Result != null)
             {
@@ -225,27 +255,25 @@ namespace SeekerDungeon.Solana
                 SetLabel(_solBalanceLabel, "SOL: --");
             }
 
+            // Derive the player's ATA directly (same approach as the main menu)
+            // instead of wallet.GetTokenAccounts which can return stale/empty results.
             var skrMint = new PublicKey(LGConfig.ActiveSkrMint);
-            var tokenAccounts = await wallet.GetTokenAccounts(skrMint, TokenProgram.ProgramIdKey);
-            if (tokenAccounts != null && tokenAccounts.Length > 0)
+            var playerAta = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(account.PublicKey, skrMint);
+            var tokenResult = await wallet.ActiveRpcClient.GetTokenAccountBalanceAsync(playerAta, Commitment.Confirmed);
+            if (tokenResult.WasSuccessful && tokenResult.Result?.Value != null)
             {
-                ulong amountLamports = 0UL;
-                foreach (var tokenAccount in tokenAccounts)
-                {
-                    if (tokenAccount?.Account?.Data?.Parsed?.Info?.TokenAmount == null)
-                    {
-                        continue;
-                    }
-
-                    amountLamports += tokenAccount.Account.Data.Parsed.Info.TokenAmount.AmountUlong;
-                }
-
+                var rawAmount = tokenResult.Result.Value.Amount ?? "0";
+                var amountLamports = ulong.TryParse(rawAmount, out var parsed) ? parsed : 0UL;
                 var skrUi = amountLamports / (double)LGConfig.SKR_MULTIPLIER;
                 SetLabel(_skrBalanceLabel, $"SKR: {skrUi:F3}");
+                if (logDebugMessages)
+                    Debug.Log($"[GameHud] SKR balance: wallet={account.PublicKey.Key.Substring(0, 8)}.. ata={playerAta.Key.Substring(0, 8)}.. raw={rawAmount} ui={skrUi:F3}");
             }
             else
             {
                 SetLabel(_skrBalanceLabel, "SKR: 0");
+                if (logDebugMessages)
+                    Debug.Log($"[GameHud] SKR balance fetch failed: wallet={account.PublicKey.Key.Substring(0, 8)}.. ata={playerAta.Key.Substring(0, 8)}.. reason={tokenResult?.Reason}");
             }
         }
 
@@ -317,6 +345,111 @@ namespace SeekerDungeon.Solana
             {
                 SetStatus(message);
             }
+        }
+
+        private void HandleBagClicked()
+        {
+            OnBagClicked?.Invoke();
+        }
+
+        private void HandleInventoryUpdated(InventoryAccount inventory)
+        {
+            RefreshInventorySlots(inventory);
+        }
+
+        private void RefreshInventorySlots(InventoryAccount inventory)
+        {
+            if (_inventorySlotsContainer == null)
+            {
+                return;
+            }
+
+            _inventorySlotsContainer.Clear();
+            _slotsByItemId.Clear();
+
+            if (inventory?.Items == null || inventory.Items.Length == 0)
+            {
+                return;
+            }
+
+            foreach (var item in inventory.Items)
+            {
+                if (item == null || item.Amount == 0)
+                {
+                    continue;
+                }
+
+                var itemId = LGDomainMapper.ToItemId(item.ItemId);
+                var slot = CreateSlotElement(itemId, item.Amount);
+                _inventorySlotsContainer.Add(slot);
+                _slotsByItemId[itemId] = slot;
+            }
+        }
+
+        private VisualElement CreateSlotElement(ItemId itemId, uint amount)
+        {
+            var slot = new VisualElement();
+            slot.AddToClassList("hud-inventory-slot");
+
+            var icon = new VisualElement();
+            icon.AddToClassList("hud-inventory-slot-icon");
+            if (itemRegistry != null)
+            {
+                var sprite = itemRegistry.GetIcon(itemId);
+                if (sprite != null)
+                {
+                    icon.style.backgroundImage = new StyleBackground(sprite);
+                }
+            }
+
+            slot.Add(icon);
+
+            var countLabel = new Label(amount > 1 ? amount.ToString() : string.Empty);
+            countLabel.AddToClassList("hud-inventory-slot-count");
+            slot.Add(countLabel);
+
+            // Tooltip-style: add item name via tooltip
+            if (itemRegistry != null)
+            {
+                slot.tooltip = itemRegistry.GetDisplayName(itemId);
+            }
+
+            return slot;
+        }
+
+        /// <summary>
+        /// Returns the screen-space center position of the inventory slot for a given item id.
+        /// Used by the loot fly animation to know where to send items.
+        /// Returns null if the slot does not exist or is not laid out yet.
+        /// </summary>
+        public Vector3? GetSlotScreenPosition(ItemId itemId)
+        {
+            if (!_slotsByItemId.TryGetValue(itemId, out var slot))
+            {
+                // Fall back to the bag button position if the slot doesn't exist yet
+                if (_bagButton != null)
+                {
+                    var bagRect = _bagButton.worldBound;
+                    if (bagRect.width > 0 && bagRect.height > 0)
+                    {
+                        // UIToolkit y is top-down, Screen y is bottom-up
+                        var screenY = Screen.height - bagRect.center.y;
+                        return new Vector3(bagRect.center.x, screenY, 0f);
+                    }
+                }
+
+                return null;
+            }
+
+            var rect = slot.worldBound;
+            if (rect.width <= 0 || rect.height <= 0)
+            {
+                return null;
+            }
+
+            // UIToolkit y is top-down, Screen y is bottom-up
+            var y = Screen.height - rect.center.y;
+            return new Vector3(rect.center.x, y, 0f);
         }
 
         private static void SetLabel(Label label, string value)

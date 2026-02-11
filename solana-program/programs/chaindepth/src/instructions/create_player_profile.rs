@@ -109,11 +109,11 @@ pub fn handler(ctx: Context<CreatePlayerProfile>, skin_id: u16, display_name: St
     profile.display_name = display_name;
 
     if !profile.starter_pickaxe_granted {
-        inventory.add_item(item_ids::TOOL, 1, 100)?;
+        inventory.add_item(item_ids::BRONZE_PICKAXE, 1, 80)?;
         profile.starter_pickaxe_granted = true;
 
         if player_account.equipped_item_id == 0 {
-            player_account.equipped_item_id = item_ids::TOOL;
+            player_account.equipped_item_id = item_ids::BRONZE_PICKAXE;
         }
     }
 

@@ -116,8 +116,8 @@ pub fn handler(ctx: Context<LootBoss>) -> Result<()> {
 
     let loot_hash = generate_loot_hash(clock.slot, &player_key, room.center_id);
     let (item_type, item_amount) = calculate_boss_loot(loot_hash);
-    let item_id = map_item_type_to_item_id(item_type);
-    let durability = item_durability(item_type);
+    let item_id = map_item_type_to_item_id(item_type, loot_hash);
+    let durability = item_durability(item_type, item_id);
 
     if inventory.owner == Pubkey::default() {
         inventory.owner = player_key;
@@ -172,18 +172,74 @@ fn calculate_boss_loot(hash: u64) -> (u8, u8) {
     (item_type, item_amount)
 }
 
-fn map_item_type_to_item_id(item_type: u8) -> u16 {
+fn map_item_type_to_item_id(item_type: u8, hash: u64) -> u16 {
+    let picker = ((hash >> 16) & 0xFFFF) as usize;
     match item_type {
-        item_types::ORE => item_ids::ORE,
-        item_types::TOOL => item_ids::TOOL,
-        item_types::BUFF => item_ids::BUFF,
-        _ => item_ids::ORE,
+        item_types::TOOL => {
+            // Boss drops: includes rare weapons not found in chests
+            const TOOLS: [u16; 9] = [
+                item_ids::IRON_PICKAXE,
+                item_ids::IRON_SWORD,
+                item_ids::DIAMOND_SWORD,
+                item_ids::NOKIA_3310,
+                item_ids::IRON_SCIMITAR,
+                item_ids::BRONZE_SWORD,
+                item_ids::BRONZE_PICKAXE,
+                item_ids::WOODEN_PIPE,
+                item_ids::WOODEN_TANKARD,
+            ];
+            TOOLS[picker % TOOLS.len()]
+        }
+        item_types::ORE => {
+            // Boss drops: includes rare valuables not found in chests
+            const VALUABLES: [u16; 16] = [
+                item_ids::GOLD_COIN,
+                item_ids::GOLD_BAR,
+                item_ids::GOLD_BAR,     // weighted: more common from bosses
+                item_ids::DIAMOND,
+                item_ids::RUBY,
+                item_ids::SAPPHIRE,
+                item_ids::EMERALD,
+                item_ids::ANCIENT_CROWN,
+                item_ids::DRAGON_SCALE,
+                item_ids::CURSED_AMULET,
+                item_ids::GOLDEN_CHALICE,
+                item_ids::MYSTIC_ORB,
+                item_ids::PHOENIX_FEATHER,
+                item_ids::VOID_SHARD,
+                item_ids::SKELETON_KEY,
+                item_ids::ENCHANTED_SCROLL,
+            ];
+            VALUABLES[picker % VALUABLES.len()]
+        }
+        item_types::BUFF => {
+            // Boss drops more major buffs
+            const BUFFS: [u16; 3] = [
+                item_ids::MINOR_BUFF,
+                item_ids::MAJOR_BUFF,
+                item_ids::MAJOR_BUFF,   // weighted: better from bosses
+            ];
+            BUFFS[picker % BUFFS.len()]
+        }
+        _ => item_ids::GOLD_COIN,
     }
 }
 
-fn item_durability(item_type: u8) -> u16 {
-    match item_type {
-        item_types::TOOL => 100,
-        _ => 0,
+fn item_durability(item_type: u8, item_id: u16) -> u16 {
+    if item_type == item_types::TOOL {
+        match item_id {
+            // Bronze tier
+            item_ids::BRONZE_PICKAXE | item_ids::BRONZE_SWORD => 80,
+            // Iron tier
+            item_ids::IRON_PICKAXE | item_ids::IRON_SWORD | item_ids::IRON_SCIMITAR => 120,
+            // Diamond tier
+            item_ids::DIAMOND_SWORD => 200,
+            // Fun / novelty weapons
+            item_ids::NOKIA_3310 => 9999,
+            item_ids::WOODEN_PIPE | item_ids::WOODEN_TANKARD => 60,
+            _ => 100,
+        }
+    } else {
+        0
     }
 }

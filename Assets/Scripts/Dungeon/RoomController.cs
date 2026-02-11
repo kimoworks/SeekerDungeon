@@ -200,6 +200,18 @@ namespace SeekerDungeon.Dungeon
             }
         }
 
+        /// <summary>
+        /// Triggers the chest open animation on the chest visual controller.
+        /// Called after a successful loot transaction.
+        /// </summary>
+        public void PlayChestOpenAnimation()
+        {
+            if (chestVisualController != null)
+            {
+                chestVisualController.PlayOpenAnimation();
+            }
+        }
+
         private GameObject ResolveCenterVisual(RoomCenterType centerType)
         {
             return centerType switch
