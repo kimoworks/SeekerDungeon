@@ -14,6 +14,7 @@ namespace SeekerDungeon.Dungeon
     {
         [Header("References")]
         [SerializeField] private LGManager lgManager;
+        [SerializeField] private DungeonManager dungeonManager;
 
         [Header("Scheduler")]
         [SerializeField] private bool autoRun = true;
@@ -47,16 +48,18 @@ namespace SeekerDungeon.Dungeon
             {
                 lgManager = UnityEngine.Object.FindFirstObjectByType<LGManager>();
             }
+
+            if (dungeonManager == null)
+            {
+                dungeonManager = UnityEngine.Object.FindFirstObjectByType<DungeonManager>();
+            }
         }
 
         private void OnEnable()
         {
-            if (!autoRun)
-            {
-                return;
-            }
-
-            StartLoop();
+            // Startup is now coordinated by DungeonManager.InitializeAsync
+            // to avoid racing with the initial room fetch and job finalization.
+            // DungeonManager calls StartLoop() after init completes.
         }
 
         private void OnDisable()
@@ -267,59 +270,98 @@ namespace SeekerDungeon.Dungeon
                 return;
             }
 
-            await lgManager.TickJob(direction);
-
-            var room = lgManager.CurrentRoomState;
-            var player = lgManager.CurrentPlayerState;
-            if (room == null || player == null)
-            {
-                return;
-            }
-
-            var directionIndex = (int)direction;
-            if (directionIndex < 0 || directionIndex >= room.Walls.Length)
-            {
-                return;
-            }
-
-            var wallState = room.Walls[directionIndex];
-            var progress = directionIndex < room.Progress.Length ? room.Progress[directionIndex] : 0UL;
-            var required = directionIndex < room.BaseSlots.Length ? room.BaseSlots[directionIndex] : 0UL;
-            if (wallState != LGConfig.WALL_RUBBLE)
-            {
-                // Wall is no longer rubble, reset fail count
-                _completeJobFailCount.Remove(direction);
-                return;
-            }
-
-            if (progress < required)
-            {
-                Log($"Auto-complete not ready yet: {directionName} progress={progress}/{required}");
-                return;
-            }
-
-            // Use helper stake check (more reliable than player.ActiveJobs)
-            var hasHelperStake = await lgManager.HasHelperStakeInCurrentRoom(direction);
-            if (!hasHelperStake)
-            {
-                Log($"No helper stake found for {directionName}, skipping CompleteJob");
-                return;
-            }
-
+            // Suppress DungeonManager event-driven snapshot rebuilds while we
+            // run the TX cycle. The onSuccess callbacks inside TickJob /
+            // CompleteJob / ClaimJobReward each fetch state and fire events,
+            // which would push stale intermediate snapshots (timer resets,
+            // player teleporting to idle, rubble reappearing).
+            dungeonManager?.SuppressEventSnapshots();
             try
             {
+                // ── Step 1: Tick ──────────────────────────────────────────
+                var tickSig = await lgManager.TickJob(direction);
+                if (string.IsNullOrWhiteSpace(tickSig))
+                {
+                    Log($"TickJob TX failed for {directionName}, aborting cycle");
+                    failCount = (_completeJobFailCount.TryGetValue(direction, out var tc) ? tc : 0) + 1;
+                    _completeJobFailCount[direction] = failCount;
+                    SetNextAttemptAt(direction, Time.unscaledTime + completeJobFailCooldownSeconds);
+                    return;
+                }
+
+                var room = lgManager.CurrentRoomState;
+                var player = lgManager.CurrentPlayerState;
+                if (room == null || player == null)
+                {
+                    return;
+                }
+
+                var directionIndex = (int)direction;
+                if (directionIndex < 0 || directionIndex >= room.Walls.Length)
+                {
+                    return;
+                }
+
+                var wallState = room.Walls[directionIndex];
+                var progress = directionIndex < room.Progress.Length ? room.Progress[directionIndex] : 0UL;
+                var required = directionIndex < room.BaseSlots.Length ? room.BaseSlots[directionIndex] : 0UL;
+                if (wallState != LGConfig.WALL_RUBBLE)
+                {
+                    // Wall is no longer rubble, reset fail count
+                    _completeJobFailCount.Remove(direction);
+                    return;
+                }
+
+                if (progress < required)
+                {
+                    Log($"Auto-complete not ready yet: {directionName} progress={progress}/{required}");
+                    return;
+                }
+
+                // Use helper stake check (more reliable than player.ActiveJobs)
+                var hasHelperStake = await lgManager.HasHelperStakeInCurrentRoom(direction);
+                if (!hasHelperStake)
+                {
+                    Log($"No helper stake found for {directionName}, skipping CompleteJob");
+                    return;
+                }
+
+                // ── Step 2: Complete ──────────────────────────────────────
                 Log($"Calling CompleteJob for {directionName}...");
-                await lgManager.CompleteJob(direction);
-                // Success: reset fail count
+                var completeSig = await lgManager.CompleteJob(direction);
+                if (string.IsNullOrWhiteSpace(completeSig))
+                {
+                    failCount = (_completeJobFailCount.TryGetValue(direction, out var cc) ? cc : 0) + 1;
+                    _completeJobFailCount[direction] = failCount;
+                    SetNextAttemptAt(direction, Time.unscaledTime + completeJobFailCooldownSeconds);
+                    Log($"CompleteJob TX failed for {directionName} (attempt {failCount}/{maxCompleteJobRetries})");
+                    return;
+                }
+
                 _completeJobFailCount.Remove(direction);
                 Log($"CompleteJob succeeded for {directionName}");
+
+                // ── Step 3: Claim reward ──────────────────────────────────
+                Log($"Calling ClaimJobReward for {directionName}...");
+                var claimSig = await lgManager.ClaimJobReward(direction);
+                if (string.IsNullOrWhiteSpace(claimSig))
+                {
+                    Log($"ClaimJobReward TX failed for {directionName} (non-fatal, will retry next cycle)");
+                }
+                else
+                {
+                    Log($"ClaimJobReward succeeded for {directionName}");
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                failCount = (_completeJobFailCount.TryGetValue(direction, out var c) ? c : 0) + 1;
-                _completeJobFailCount[direction] = failCount;
-                SetNextAttemptAt(direction, Time.unscaledTime + completeJobFailCooldownSeconds);
-                Log($"CompleteJob failed for {directionName} (attempt {failCount}/{maxCompleteJobRetries}): {ex.Message}");
+                // Resume event-driven snapshots and push one clean snapshot
+                // that reflects the actual post-TX state.
+                dungeonManager?.ResumeEventSnapshots();
+                if (dungeonManager != null)
+                {
+                    await dungeonManager.RefreshCurrentRoomSnapshotAsync();
+                }
             }
         }
 

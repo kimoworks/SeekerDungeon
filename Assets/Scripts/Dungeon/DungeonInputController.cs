@@ -80,6 +80,11 @@ namespace SeekerDungeon.Dungeon
             ResolveLocalPlayerController();
             if (_localPlayerController == null || player == null) return;
 
+            // Don't revert wielded items while an optimistic job is pending;
+            // stale RPC reads would incorrectly clear them.
+            if (dungeonManager != null && dungeonManager.HasOptimisticJob)
+                return;
+
             // If the player has no active jobs in the current room, hide wielded items
             var hasAnyJobHere = false;
             if (player.ActiveJobs != null)
@@ -215,6 +220,13 @@ namespace SeekerDungeon.Dungeon
                         }
                     }
 
+                    // Tell DungeonManager about the optimistic job so stale
+                    // snapshots from RefreshAllState do not revert the visuals.
+                    if (wasRubbleBeforeInteraction && !wasDoorOpenBeforeInteraction && dungeonManager != null)
+                    {
+                        dungeonManager.SetOptimisticJobDirection(door.Direction);
+                    }
+
                     // ── Execute the on-chain interaction ──
                     var signature = await _lgManager.InteractWithDoor((byte)door.Direction);
 
@@ -230,7 +242,26 @@ namespace SeekerDungeon.Dungeon
 
                     if (shouldTransitionRoom)
                     {
-                        // Player moved rooms -- hide any wielded item
+                        // Player moved rooms -- clear optimistic job state and hide any wielded item
+                        if (dungeonManager != null)
+                        {
+                            dungeonManager.ClearOptimisticJobDirection();
+
+                            // When the move TX succeeded but the RPC still returns
+                            // the old position, tell DungeonManager the expected
+                            // destination so the transition targets the correct room.
+                            if (hadRoomBefore)
+                            {
+                                var (adjX, adjY) = LGConfig.GetAdjacentCoords(
+                                    previousRoomX, previousRoomY, (byte)door.Direction);
+                                dungeonManager.SetOptimisticTargetRoom(adjX, adjY);
+                            }
+                        }
+
+                        // Tell DungeonManager which door we exited through so the
+                        // player spawns at the opposite door in the new room.
+                        dungeonManager.SetRoomEntryFromExitDirection(door.Direction);
+
                         if (_localPlayerController != null)
                         {
                             _localPlayerController.HideAllWieldedItems();
@@ -240,7 +271,9 @@ namespace SeekerDungeon.Dungeon
                     }
                     else if (!string.IsNullOrWhiteSpace(signature) || hasHelperStakeAfterInteraction)
                     {
-                        // Player is working a rubble-clearing job -- refresh room state for timer
+                        // Player is working a rubble-clearing job -- refresh room state for timer.
+                        // The optimistic direction stays active to protect against stale reads;
+                        // it will auto-clear once real data confirms the job.
                         if (dungeonManager != null)
                         {
                             await dungeonManager.RefreshCurrentRoomSnapshotAsync();
@@ -248,14 +281,22 @@ namespace SeekerDungeon.Dungeon
                     }
                     else
                     {
-                        // Transaction failed or door is now open -- revert optimistic UI if needed
-                        var isDoorOpenNow = IsDoorOpenInCurrentState(door.Direction);
+                        // Transaction failed and player has no stake -- revert all
+                        // optimistic visuals (position, wielded item, timer).
+                        if (dungeonManager != null)
+                        {
+                            dungeonManager.ClearOptimisticJobDirection();
+                        }
+
                         if (_localPlayerController != null)
                         {
-                            if (isDoorOpenNow || !wasRubbleBeforeInteraction)
-                            {
-                                _localPlayerController.HideAllWieldedItems();
-                            }
+                            _localPlayerController.HideAllWieldedItems();
+                        }
+
+                        // Push a clean snapshot so the player moves back to idle.
+                        if (dungeonManager != null)
+                        {
+                            await dungeonManager.RefreshCurrentRoomSnapshotAsync();
                         }
                     }
 

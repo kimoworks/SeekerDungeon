@@ -22,6 +22,12 @@ namespace SeekerDungeon.Dungeon
 
         private readonly Dictionary<RoomWallState, GameObject> _visualByState = new();
 
+        /// <summary>
+        /// The VisualInteractable on the currently active state visual, or null.
+        /// Updated every time ApplyDoorState swaps the active child.
+        /// </summary>
+        public VisualInteractable ActiveVisualInteractable { get; private set; }
+
         private void Awake()
         {
             RebuildStateIndex();
@@ -51,6 +57,11 @@ namespace SeekerDungeon.Dungeon
                 var useFallback = targetVisual == null;
                 fallbackVisualRoot.SetActive(useFallback);
             }
+
+            // Resolve the VisualInteractable on whichever state visual is now active.
+            ActiveVisualInteractable = targetVisual != null
+                ? targetVisual.GetComponentInChildren<VisualInteractable>(true)
+                : null;
         }
 
         private void RebuildStateIndex()

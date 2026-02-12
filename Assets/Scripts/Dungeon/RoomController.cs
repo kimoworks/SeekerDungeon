@@ -473,6 +473,12 @@ namespace SeekerDungeon.Dungeon
         }
 
         /// <summary>
+        /// The last slot value set via <see cref="SetCurrentSlot"/>.
+        /// Used by DungeonManager for optimistic timer estimation.
+        /// </summary>
+        public ulong LastKnownSlot => _lastKnownSlot;
+
+        /// <summary>
         /// Set the current slot value for timer calculations.
         /// </summary>
         public void SetCurrentSlot(ulong slot)
@@ -568,10 +574,30 @@ namespace SeekerDungeon.Dungeon
             {
                 foreach (var kvp in room.Doors)
                 {
-                    if (!_doorInteractableByDirection.TryGetValue(kvp.Key, out var vi) || vi == null)
+                    // Prefer the VisualInteractable on whichever state visual
+                    // is currently active (resolved by DoorVisualController each
+                    // time ApplyDoorState swaps children). Fall back to the
+                    // cached reference from BuildDoorLayerIndex for doors that
+                    // have a single shared VisualInteractable higher up.
+                    VisualInteractable vi = null;
+                    if (_doorVisualByDirection.TryGetValue(kvp.Key, out var dvc) && dvc != null)
+                    {
+                        vi = dvc.ActiveVisualInteractable;
+                    }
+
+                    if (vi == null)
+                    {
+                        _doorInteractableByDirection.TryGetValue(kvp.Key, out vi);
+                    }
+
+                    if (vi == null)
                     {
                         continue;
                     }
+
+                    // Keep the cached reference in sync so RefreshAllInteractableRenderers
+                    // and SetAllInteractablesOff operate on the correct component.
+                    _doorInteractableByDirection[kvp.Key] = vi;
 
                     var door = kvp.Value;
                     var localPlayerWorking = activeJobDirs != null && activeJobDirs.Contains(kvp.Key);

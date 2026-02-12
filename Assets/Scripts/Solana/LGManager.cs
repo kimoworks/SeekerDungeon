@@ -1183,6 +1183,217 @@ namespace SeekerDungeon.Solana
             return await AccountHasData(helperStakePda);
         }
 
+        // ── Cross-room job helpers ────────────────────────────────────────
+        // These variants accept explicit room coordinates so the caller can
+        // clean up jobs that are NOT in the player's current room.
+
+        /// <summary>
+        /// Check if the player has a helper stake for a specific room and direction.
+        /// Unlike <see cref="HasHelperStakeInCurrentRoom"/>, this accepts explicit room coordinates.
+        /// </summary>
+        public async UniTask<bool> HasHelperStakeForRoom(byte direction, int roomX, int roomY)
+        {
+            if (Web3.Wallet == null || CurrentGlobalState == null)
+            {
+                return false;
+            }
+
+            var roomPda = DeriveRoomPda(CurrentGlobalState.SeasonSeed, roomX, roomY);
+            if (roomPda == null)
+            {
+                return false;
+            }
+
+            var helperStakePda = DeriveHelperStakePda(roomPda, direction, Web3.Wallet.Account.PublicKey);
+            if (helperStakePda == null)
+            {
+                return false;
+            }
+
+            return await AccountHasData(helperStakePda);
+        }
+
+        /// <summary>
+        /// Tick a job for a specific room (not necessarily the player's current room).
+        /// TickJob is permissionless and only needs the room PDA.
+        /// </summary>
+        public async UniTask<string> TickJobForRoom(byte direction, int roomX, int roomY)
+        {
+            if (Web3.Wallet == null || CurrentGlobalState == null)
+            {
+                LogError("Wallet or global state not available");
+                return null;
+            }
+
+            Log($"Ticking job at ({roomX},{roomY}) direction {LGConfig.GetDirectionName(direction)}...");
+
+            try
+            {
+                var signature = await ExecuteGameplayActionAsync(
+                    "TickJob",
+                    (context) =>
+                    {
+                        var roomPda = DeriveRoomPda(CurrentGlobalState.SeasonSeed, roomX, roomY);
+
+                        return ChaindepthProgram.TickJob(
+                            new TickJobAccounts
+                            {
+                                Caller = context.Authority,
+                                Global = _globalPda,
+                                Room = roomPda
+                            },
+                            direction,
+                            _programId
+                        );
+                    },
+                    async (signature) =>
+                    {
+                        Log($"Job ticked at ({roomX},{roomY})! TX: {signature}");
+                        // Fetch the job's room state quietly (no event for our current room).
+                        await FetchRoomState(roomX, roomY, fireEvent: false);
+                    });
+
+                return signature;
+            }
+            catch (Exception e)
+            {
+                LogError($"TickJobForRoom failed at ({roomX},{roomY}): {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Complete a job for a specific room (not necessarily the player's current room).
+        /// </summary>
+        public async UniTask<string> CompleteJobForRoom(byte direction, int roomX, int roomY)
+        {
+            if (Web3.Wallet == null || CurrentPlayerState == null || CurrentGlobalState == null)
+            {
+                LogError("Wallet, player, or global state not available");
+                return null;
+            }
+
+            Log($"Completing job at ({roomX},{roomY}) direction {LGConfig.GetDirectionName(direction)}...");
+
+            try
+            {
+                var signature = await ExecuteGameplayActionAsync(
+                    "CompleteJob",
+                    (context) =>
+                    {
+                        var playerPda = DerivePlayerPda(context.Player);
+                        var roomPda = DeriveRoomPda(CurrentGlobalState.SeasonSeed, roomX, roomY);
+                        var (adjX, adjY) = LGConfig.GetAdjacentCoords(roomX, roomY, direction);
+                        var adjacentRoomPda = DeriveRoomPda(CurrentGlobalState.SeasonSeed, adjX, adjY);
+                        var escrowPda = DeriveEscrowPda(roomPda, direction);
+                        var helperStakePda = DeriveHelperStakePda(roomPda, direction, context.Player);
+
+                        return ChaindepthProgram.CompleteJob(
+                            new CompleteJobAccounts
+                            {
+                                Authority = context.Authority,
+                                Player = context.Player,
+                                Global = _globalPda,
+                                PlayerAccount = playerPda,
+                                Room = roomPda,
+                                HelperStake = helperStakePda,
+                                AdjacentRoom = adjacentRoomPda,
+                                Escrow = escrowPda,
+                                PrizePool = CurrentGlobalState.PrizePool,
+                                SessionAuthority = context.SessionAuthority,
+                                TokenProgram = TokenProgram.ProgramIdKey,
+                                SystemProgram = SystemProgram.ProgramIdKey
+                            },
+                            direction,
+                            _programId
+                        );
+                    },
+                    async (signature) =>
+                    {
+                        Log($"Job completed at ({roomX},{roomY})! TX: {signature}");
+                        await FetchRoomState(roomX, roomY, fireEvent: false);
+                    });
+
+                return signature;
+            }
+            catch (Exception e)
+            {
+                LogError($"CompleteJobForRoom failed at ({roomX},{roomY}): {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Claim a job reward for a specific room (not necessarily the player's current room).
+        /// The room_presence PDA is always derived from the player's CURRENT room.
+        /// </summary>
+        public async UniTask<string> ClaimJobRewardForRoom(byte direction, int roomX, int roomY)
+        {
+            if (Web3.Wallet == null || CurrentPlayerState == null || CurrentGlobalState == null)
+            {
+                LogError("Wallet, player, or global state not available");
+                return null;
+            }
+
+            Log($"Claiming reward at ({roomX},{roomY}) direction {LGConfig.GetDirectionName(direction)}...");
+
+            try
+            {
+                var signature = await ExecuteGameplayActionAsync(
+                    "ClaimJobReward",
+                    (context) =>
+                    {
+                        var playerPda = DerivePlayerPda(context.Player);
+                        // Room PDA for the room where the job was.
+                        var roomPda = DeriveRoomPda(CurrentGlobalState.SeasonSeed, roomX, roomY);
+                        var escrowPda = DeriveEscrowPda(roomPda, direction);
+                        var helperStakePda = DeriveHelperStakePda(roomPda, direction, context.Player);
+                        // Room presence is always the player's CURRENT room.
+                        var roomPresencePda = DeriveRoomPresencePda(
+                            CurrentGlobalState.SeasonSeed,
+                            CurrentPlayerState.CurrentRoomX,
+                            CurrentPlayerState.CurrentRoomY,
+                            context.Player
+                        );
+                        var playerTokenAccount = AssociatedTokenAccountProgram.DeriveAssociatedTokenAccount(
+                            context.Player,
+                            CurrentGlobalState.SkrMint
+                        );
+
+                        return ChaindepthProgram.ClaimJobReward(
+                            new ClaimJobRewardAccounts
+                            {
+                                Authority = context.Authority,
+                                Player = context.Player,
+                                Global = _globalPda,
+                                PlayerAccount = playerPda,
+                                Room = roomPda,
+                                RoomPresence = roomPresencePda,
+                                Escrow = escrowPda,
+                                HelperStake = helperStakePda,
+                                PlayerTokenAccount = playerTokenAccount,
+                                SessionAuthority = context.SessionAuthority,
+                                TokenProgram = TokenProgram.ProgramIdKey
+                            },
+                            direction,
+                            _programId
+                        );
+                    },
+                    async (signature) =>
+                    {
+                        Log($"Job reward claimed at ({roomX},{roomY})! TX: {signature}");
+                        await RefreshAllState();
+                    });
+
+                return signature;
+            }
+            catch (Exception e)
+            {
+                LogError($"ClaimJobRewardForRoom failed at ({roomX},{roomY}): {e.Message}");
+                return null;
+            }
+        }
+
         /// <summary>
         /// Initialize player account at spawn point
         /// </summary>
